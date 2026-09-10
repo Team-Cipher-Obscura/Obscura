@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SkyBharat — Checkout</title>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body data-page="checkout">
+
+<nav class="site-nav" aria-label="Main">
+  <div class="container">
+    <a class="brand" href="index.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      SkyBharat
+    </a>
+    <div class="nav-links">
+      <a href="index.html">Search</a>
+      <a href="login.html">Log in</a>
+    </div>
+  </div>
+</nav>
+
+<main class="container">
+  <div class="checkout-grid">
+
+    <!-- Traveler + payment -->
+    <div class="card card-pad">
+      <p class="section-title">Traveler details</p>
+
+      <div class="traveler-photo-row">
+        <img src="assets/traveler-photo.jpg" alt="Traveler photo" width="64" height="64">
+        <div>
+          <div style="font-weight:600;">Traveler photo</div>
+          <a href="#" class="hint" style="text-decoration:underline;">Change photo</a>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="travelerName">Full name</label>
+        <input type="text" id="travelerName" name="travelerName" autocomplete="name" placeholder="Asha Verma">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="travelerEmail">Email</label>
+          <input type="email" id="travelerEmail" name="travelerEmail" autocomplete="email" placeholder="you@example.com">
+        </div>
+        <div class="field">
+          <label for="travelerPhone">Phone number</label>
+          <input type="tel" id="travelerPhone" name="travelerPhone" autocomplete="tel" placeholder="+91 98765 43210">
+        </div>
+      </div>
+
+      <hr class="div">
+
+      <p class="section-title">Payment</p>
+
+      <div id="savedCardRow" class="saved-card-row">
+        <span>Visa <span class="card-dots">•••• 4242</span></span>
+        <button type="button" id="removeCardBtn" class="btn btn-danger">Remove</button>
+      </div>
+
+      <div class="field">
+        <label for="cardNumber">Card number</label>
+        <input type="text" id="cardNumber" name="cardNumber" inputmode="numeric"
+               autocomplete="cc-number" placeholder="4111 1111 1111 1111">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="cardExpiry">Expiry</label>
+          <input type="text" id="cardExpiry" name="cardExpiry" autocomplete="cc-exp" placeholder="MM/YY">
+        </div>
+        <div class="field">
+          <label for="cardCvv">CVV</label>
+          <input type="text" id="cardCvv" name="cardCvv" inputmode="numeric" autocomplete="cc-csc" placeholder="123">
+        </div>
+      </div>
+      <div class="field">
+        <label for="cardName">Name on card</label>
+        <input type="text" id="cardName" name="cardName" autocomplete="cc-name" placeholder="Asha Verma">
+      </div>
+    </div>
+
+    <!-- Trip summary + price + pay -->
+    <div>
+      <div class="card card-pad" style="margin-bottom:16px;">
+        <p class="section-title">Trip summary</p>
+        <div id="tripSummary"></div>
+      </div>
+
+      <div class="card card-pad">
+        <div id="payStatus" class="status-banner" aria-live="polite"></div>
+        <div class="price-line"><span>Fare</span><span id="priceBase">₹0</span></div>
+        <div class="price-line"><span>Taxes &amp; fees</span><span id="priceTaxes">₹0</span></div>
+        <div class="price-line total"><span>Total</span><span id="priceTotal">₹0</span></div>
+        <button type="button" id="payBtn" class="btn btn-primary btn-block" style="margin-top:16px;">Pay now</button>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    Mock site for local testing only — no real flights, payments, or accounts.
+  </div>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

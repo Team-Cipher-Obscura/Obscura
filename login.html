@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SkyBharat — Log in</title>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body data-page="auth">
+
+<nav class="site-nav" aria-label="Main">
+  <div class="container">
+    <a class="brand" href="index.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      SkyBharat
+    </a>
+    <div class="nav-links">
+      <a href="index.html">Search</a>
+      <a href="login.html" aria-current="page">Log in</a>
+    </div>
+  </div>
+</nav>
+
+<main class="container">
+  <div class="auth-wrap card card-pad">
+
+    <div class="auth-tabs" role="tablist" aria-label="Log in or sign up">
+      <button type="button" class="auth-tab" role="tab" id="tabLogin"
+              aria-selected="true" aria-controls="loginPanel" data-panel="loginPanel">Log in</button>
+      <button type="button" class="auth-tab" role="tab" id="tabSignup"
+              aria-selected="false" aria-controls="signupPanel" data-panel="signupPanel">Sign up</button>
+    </div>
+
+    <!-- Log in -->
+    <section id="loginPanel" class="auth-panel" role="tabpanel" aria-labelledby="tabLogin">
+      <div id="loginStatus" class="status-banner"></div>
+      <form id="loginForm" autocomplete="on">
+        <div class="field">
+          <label for="loginEmail">Email</label>
+          <input type="email" id="loginEmail" name="email" autocomplete="email" placeholder="you@example.com" required>
+        </div>
+        <div class="field">
+          <label for="loginPassword">Password</label>
+          <input type="password" id="loginPassword" name="password" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Log in</button>
+      </form>
+    </section>
+
+    <!-- Sign up -->
+    <section id="signupPanel" class="auth-panel" role="tabpanel" aria-labelledby="tabSignup" hidden>
+      <form id="signupForm" autocomplete="on">
+        <div class="field">
+          <label for="signupName">Full name</label>
+          <input type="text" id="signupName" name="name" autocomplete="name" placeholder="Asha Verma" required>
+        </div>
+        <div class="field">
+          <label for="signupEmail">Email</label>
+          <input type="email" id="signupEmail" name="email" autocomplete="email" placeholder="you@example.com" required>
+        </div>
+        <div class="field">
+          <label for="signupPhone">Phone number</label>
+          <input type="tel" id="signupPhone" name="phone" autocomplete="tel" placeholder="+91 98765 43210" required>
+        </div>
+        <div class="field">
+          <label for="signupPassword">Password</label>
+          <input type="password" id="signupPassword" name="password" autocomplete="new-password" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Create account</button>
+      </form>
+
+      <div id="otpStep" hidden>
+        <p class="section-title" style="margin-bottom:4px;">Verify your phone</p>
+        <p class="hint" style="margin-bottom:16px;">Enter the 6-digit code sent to your phone.</p>
+        <div id="otpStatus" class="status-banner"></div>
+        <div class="field">
+          <label for="otpCode">Verification code</label>
+          <div class="otp-boxes">
+            <input type="text" id="otpCode" name="otp" inputmode="numeric" pattern="[0-9]*"
+                   maxlength="6" autocomplete="one-time-code" aria-label="6-digit verification code">
+          </div>
+        </div>
+        <button type="button" id="verifyOtpBtn" class="btn btn-primary btn-block">Verify</button>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    Mock site for local testing only — no real flights, payments, or accounts.
+  </div>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 from google import genai
 from google.genai import types
-from config import VLM_API_KEY
+from config import VLM_API_KEY, VLM_MODEL_NAME
 import base64
 
 client = genai.Client(api_key=VLM_API_KEY)
@@ -20,7 +20,7 @@ def call_vlm(prompt: str, screenshot_b64: str | None) -> str:
         )
 
     response = client.models.generate_content(
-        model="gemini-3.6-flash",
+        model=VLM_MODEL_NAME,
         contents=contents
     )
 

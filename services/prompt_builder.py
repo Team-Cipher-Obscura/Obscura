@@ -1,9 +1,8 @@
 import json
-from model import Element, SanitizedRegion
+from model import Element
 
-def build_prompt(task: str, elements: list[Element], sanitized_regions: list[SanitizedRegion]) -> str:
+def build_prompt(task: str, elements: list[Element]) -> str:
     elements_json = json.dumps([e.dict() for e in elements])
-    regions_json = json.dumps([r.dict() for r in sanitized_regions])
 
     return f"""You are a browser automation assistant. Respond with ONLY a single JSON object — no prose, no markdown, no explanation.
 
@@ -20,8 +19,8 @@ Some elements have "sensitive": true — their "text" field is already a placeho
 like "[REDACTED_PASSWORD]", not real content. You may still target them structurally
 (e.g. click a login button) but never try to infer or repeat their real content.
 
-BLURRED VISUAL REGIONS (not targetable, informational only — do not read anything under these):
-{regions_json}
+The screenshot provided has already had faces and sensitive regions blurred — treat
+any blurred areas as non-targetable and do not attempt to read anything under them.
 
 SUPPORTED ACTIONS: click, type, scroll, navigate, wait
 

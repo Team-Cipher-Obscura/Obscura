@@ -13,18 +13,10 @@ class Element(BaseModel):
     sensitive_type: Optional[str] = None
     detected_by: Optional[str] = None
 
-class SanitizedRegion(BaseModel):
-    id: str
-    sensitive_type: str
-    bbox: List[float]
-    confidence: float
-    detected_by: str
-
 class AgentRequest(BaseModel):
     frame_id: Optional[str] = None
     task: str
     elements: List[Element]
-    sanitized_regions: List[SanitizedRegion] = []
     screenshot: Optional[str] = None
 
 class AgentResponse(BaseModel):

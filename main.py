@@ -19,7 +19,7 @@ def root():
 def reason(payload: AgentRequest):
     logger.info("task=%s num_elements=%d", payload.task, len(payload.elements))
     logger.info("status=%s", make_status("processing", payload.task))
-    prompt = build_prompt(payload.task, payload.elements, payload.sanitized_regions)
+    prompt = build_prompt(payload.task, payload.elements)
 
     try:
         raw = call_vlm(prompt, payload.screenshot)

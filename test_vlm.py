@@ -1,6 +1,6 @@
 from services.prompt_builder import build_prompt
 from services.vlm import call_vlm
-from model import Element, SanitizedRegion
+from model import Element
 
 elements = [
     Element(id="el_001", tag="input", type="email", role="textbox", text="[REDACTED_EMAIL]",
@@ -10,6 +10,6 @@ elements = [
             bbox=[100,260,100,40], confidence=0.98, sensitive=False),
 ]
 
-prompt = build_prompt("Find Mumbai flight", elements, [])
-raw_response = call_vlm(prompt, screenshot_b64=None)  # no real screenshot yet — text-only test first
+prompt = build_prompt("Find Mumbai flight", elements)
+raw_response = call_vlm(prompt, screenshot_b64=None)
 print(raw_response)

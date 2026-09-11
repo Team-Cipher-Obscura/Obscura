@@ -14,8 +14,7 @@ VALID_PAYLOAD = {
         {"id": "el_b02e7d", "tag": "button", "type": None, "role": "button",
          "text": "Submit", "bbox": [420,700,100,40], "confidence": 0.98, "sensitive": False},
     ],
-    "sanitized_regions": [],
-    "screenshot": None,
+    "screenshot": None
 }
 
 def test_valid_request_returns_200():

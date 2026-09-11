@@ -1,0 +1,87 @@
+{
+  "frame_id": "f_00042",
+  "elements": [
+  {
+    "id": "el_a91f3c",
+    "tag": "input",
+    "type": "password",
+    "role": "textbox",
+    "text": "[REDACTED_PASSWORD]",
+    "bbox": [420, 650, 100, 40],
+    "confidence": 0.98,
+    "sensitive": true,
+    "sensitive_type": "password_field",
+    "detected_by": "dom_attribute"
+  },
+  {
+    "id": "el_b02e7d",
+    "tag": "button",
+    "type": null,
+    "role": "button",
+    "text": "Submit",
+    "bbox": [420, 700, 100, 40],
+    "confidence": 0.98,
+    "sensitive": false
+  },
+  {
+    "id": "el_c13f8a",
+    "tag": "div",
+    "type": null,
+    "role": "text",
+    "text": "Flights from Delhi to Mumbai",
+    "bbox": [100, 200, 300, 40],
+    "confidence": 0.95,
+    "sensitive": false
+  },
+  {
+    "id": "el_d24g9b",
+    "tag": "button",
+    "type": null,
+    "role": "button",
+    "text": "Search Flights",
+    "bbox": [100, 300, 150, 40],
+    "confidence": 0.97,
+    "sensitive": false
+  },
+  {
+    "id": "el_e35h2c",
+    "tag": "div",
+    "type": null,
+    "role": "text",
+    "text": "Mumbai Airport",
+    "bbox": [100, 400, 200, 40],
+    "confidence": 0.96,
+    "sensitive": false
+  },
+  {
+    "id": "el_f46i3d",
+    "tag": "input",
+    "type": "search",
+    "role": "textbox",
+    "text": "",
+    "bbox": [100, 100, 250, 40],
+    "confidence": 0.96,
+    "sensitive": false
+  },
+  {
+    "id": "el_g57j4e",
+    "tag": "div",
+    "type": null,
+    "role": "text",
+    "text": "Special offer available",
+    "bbox": [600, 500, 250, 40],
+    "confidence": 0.45,
+    "sensitive": false
+  }
+],
+  "sanitized_regions": [
+    {
+      "id": "reg_001",
+      "sensitive_type": "face",
+      "bbox": [500, 60, 80, 80],
+      "confidence": 0.88,
+      "detected_by": "face_detection"
+    }
+  ],
+  "screenshot": "<base64 sanitized image, native dimensions, unresized>"
+}

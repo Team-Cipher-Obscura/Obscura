@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Obscura",
+  "version": "1.0.0",
+  "description": "Privacy-preserving browser agent",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["p2/dom/extractElements.js", "content.js"]
+    }
+  ]
+}

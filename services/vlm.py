@@ -1,17 +1,27 @@
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from config import VLM_API_KEY
+import base64
 
-genai.configure(api_key=VLM_API_KEY)
-model = genai.GenerativeModel("gemini-2.0-flash")
+client = genai.Client(api_key=VLM_API_KEY)
+
 
 def call_vlm(prompt: str, screenshot_b64: str | None) -> str:
-    parts = [prompt]
-    if screenshot_b64:
-        import base64
-        parts.append({"mime_type": "image/png", "data": base64.b64decode(screenshot_b64)})
+    contents = [prompt]
 
-    response = model.generate_content(
-        parts,
-        request_options={"timeout": 15},  # seconds — fail fast instead of hanging
+    if screenshot_b64:
+        image_bytes = base64.b64decode(screenshot_b64)
+
+        contents.append(
+            types.Part.from_bytes(
+                data=image_bytes,
+                mime_type="image/png"
+            )
+        )
+
+    response = client.models.generate_content(
+        model="gemini-3.6-flash",
+        contents=contents
     )
+
     return response.text

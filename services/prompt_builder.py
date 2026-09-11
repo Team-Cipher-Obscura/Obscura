@@ -2,7 +2,7 @@ import json
 from model import Element
 
 def build_prompt(task: str, elements: list[Element]) -> str:
-    elements_json = json.dumps([e.dict() for e in elements])
+    elements_json = json.dumps([e.model_dump() for e in elements])
 
     return f"""You are a browser automation assistant. Respond with ONLY a single JSON object — no prose, no markdown, no explanation.
 

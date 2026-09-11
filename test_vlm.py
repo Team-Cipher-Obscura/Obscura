@@ -13,3 +13,4 @@ elements = [
 prompt = build_prompt("Find Mumbai flight", elements)
 raw_response = call_vlm(prompt, screenshot_b64=None)
 print(raw_response)
+assert raw_response

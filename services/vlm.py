@@ -1,5 +1,5 @@
 import google.generativeai as genai
-from Obscura.config import VLM_API_KEY
+from config import VLM_API_KEY
 
 genai.configure(api_key=VLM_API_KEY)
 model = genai.GenerativeModel("gemini-2.0-flash")  # check current model name on their docs before finalizing

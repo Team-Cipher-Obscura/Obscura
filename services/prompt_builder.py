@@ -1,5 +1,5 @@
 import json
-from Obscura.model import Element, SanitizedRegion
+from model import Element, SanitizedRegion
 
 def build_prompt(task: str, elements: list[Element], sanitized_regions: list[SanitizedRegion]) -> str:
     elements_json = json.dumps([e.dict() for e in elements])

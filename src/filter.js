@@ -1,11 +1,11 @@
-const { findRelevantElements } = require("./relevance");
+const { calculateRelevance } = require("./relevance");
 const { detectChanges } = require("./changeDetection");
 
 function filterElements(p3Output, task, previousState = {}) {
-  const relevanceResults = findRelevantElements(
-    p3Output.elements,
-    task
-  );
+  const relevanceResults = p3Output.elements.map(element => ({
+    element,
+    ...calculateRelevance(element, task)
+  }));
 
   const changeResults = detectChanges(
     p3Output.elements,

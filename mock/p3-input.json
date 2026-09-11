@@ -39,7 +39,7 @@
     "type": null,
     "role": "button",
     "text": "Search Flights",
-    "bbox": [100, 300, 150, 40],
+    "bbox": [120, 300, 150, 40],
     "confidence": 0.97,
     "sensitive": false
   },
@@ -48,7 +48,7 @@
     "tag": "div",
     "type": null,
     "role": "text",
-    "text": "Mumbai Airport",
+    "text": "Mumbai International Airport",
     "bbox": [100, 400, 200, 40],
     "confidence": 0.96,
     "sensitive": false
@@ -71,6 +71,66 @@
     "text": "Special offer available",
     "bbox": [600, 500, 250, 40],
     "confidence": 0.45,
+    "sensitive": false
+  },
+  {
+    "id": "test_text",
+    "tag": "div",
+    "type": null,
+    "role": "text",
+    "text": "flights",
+    "bbox": [10, 10, 100, 30],
+    "confidence": 1,
+    "sensitive": false
+  },
+  {
+    "id": "test_type",
+    "tag": "input",
+    "type": "flights",
+    "role": "textbox",
+    "text": "",
+    "bbox": [10, 50, 100, 30],
+    "confidence": 1,
+    "sensitive": false
+  },
+  {
+    "id": "test_role",
+    "tag": "div",
+    "type": null,
+    "role": "flights",
+    "text": "",
+    "bbox": [10, 90, 100, 30],
+    "confidence": 1,
+    "sensitive": false
+  },
+  {
+    "id": "test_tag",
+    "tag": "flights",
+    "type": null,
+    "role": null,
+    "text": "",
+    "bbox": [10, 130, 100, 30],
+    "confidence": 1,
+    "sensitive": false
+  },
+  {
+    "id": "test_none",
+    "tag": "div",
+    "type": null,
+    "role": "text",
+    "text": "weather",
+    "bbox": [10, 170, 100, 30],
+    "confidence": 1,
+    "sensitive": false
+  },
+  {
+    "id": "el_new123",
+    "tag": "button",
+    "type": null,
+    "role": "button",
+    "text": "New Flight",
+    "bbox": [300, 500, 100, 40],
+    "confidence": 0.95,
     "sensitive": false
   }
 ],

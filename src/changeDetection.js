@@ -1,51 +1,48 @@
-function createElementSnapshot(element) {
-  return {
-    id: element.id,
-    text: element.text,
-    tag: element.tag,
-    type: element.type,
-    role: element.role,
-    bbox: element.bbox
-  };
-}
-
 function hasElementChanged(current, previous) {
-  if (!previous) {
-    return true;
-  }
+    // New element
+    if (!previous) {
+        return true;
+    }
 
-  return (
-    current.text !== previous.text ||
-    current.tag !== previous.tag ||
-    current.type !== previous.type ||
-    current.role !== previous.role ||
-    JSON.stringify(current.bbox) !== JSON.stringify(previous.bbox)
-  );
-}
+    // Text changed
+    if (current.text !== previous.text) {
+        return true;
+    }
 
-function detectChanges(elements, previousState) {
-  return elements.map(element => ({
-    element,
-    changed: hasElementChanged(
-      element,
-      previousState[element.id]
-    )
-  }));
-}
+    // Bounding box changed
+    if (JSON.stringify(current.bbox) !== JSON.stringify(previous.bbox)) {
+        return true;
+    }
 
-function buildPreviousState(elements) {
-  const state = {};
+    return false;
+    }
 
-  for (const element of elements) {
-    state[element.id] = createElementSnapshot(element);
-  }
+    function detectChanges(elements, previousState) {
+    return elements.map(element => ({
+        element,
+        changed: hasElementChanged(
+        element,
+        previousState[element.id]
+        )
+    }));
+    }
 
-  return state;
-}
+    function buildPreviousState(elements) {
+    const state = {};
 
-module.exports = {
-  createElementSnapshot,
-  hasElementChanged,
-  detectChanges,
-  buildPreviousState
-};
+    for (const element of elements) {
+        state[element.id] = {
+        id: element.id,
+        text: element.text,
+        bbox: element.bbox
+        };
+    }
+
+    return state;
+    }
+
+    module.exports = {
+    hasElementChanged,
+    detectChanges,
+    buildPreviousState
+    };

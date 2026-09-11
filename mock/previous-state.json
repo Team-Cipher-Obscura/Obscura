@@ -2,33 +2,31 @@
   "el_a91f3c": {
     "id": "el_a91f3c",
     "text": "[REDACTED_PASSWORD]",
-    "tag": "input",
-    "type": "password",
-    "role": "textbox",
     "bbox": [420, 650, 100, 40]
   },
   "el_b02e7d": {
     "id": "el_b02e7d",
     "text": "Submit",
-    "tag": "button",
-    "type": null,
-    "role": "button",
     "bbox": [420, 700, 100, 40]
   },
   "el_c13f8a": {
     "id": "el_c13f8a",
     "text": "Flights from Delhi to Mumbai",
-    "tag": "div",
-    "type": null,
-    "role": "text",
     "bbox": [100, 200, 300, 40]
   },
   "el_d24g9b": {
-    "id": "el_d24e7d",
+    "id": "el_d24g9b",
     "text": "Search Flights",
-    "tag": "button",
-    "type": null,
-    "role": "button",
     "bbox": [100, 300, 150, 40]
+  },
+  "el_e35h2c": {
+    "id": "el_e35h2c",
+    "text": "Mumbai Airport",
+    "bbox": [100, 400, 200, 40]
+  },
+  "el_f46i3d": {
+    "id": "el_f46i3d",
+    "text": "",
+    "bbox": [100, 100, 250, 40]
   }
 }

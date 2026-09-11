@@ -1,5 +1,3 @@
-// Common words that do not carry much meaning for relevance matching
-
 const STOPWORDS = new Set([
   "find",
   "the",
@@ -12,7 +10,8 @@ const STOPWORDS = new Set([
   "of"
 ]);
 
-// Convert text into meaningful lowercase words
+const RELEVANCE_THRESHOLD = 0.3;
+
 function tokenize(text) {
   return String(text || "")
     .toLowerCase()
@@ -22,9 +21,8 @@ function tokenize(text) {
     .filter(word => !STOPWORDS.has(word));
 }
 
-// Calculate relevance of one element against the task
 function calculateRelevance(element, task) {
-  const taskKeywords = tokenize(task);
+  const taskKeywords = [...new Set(tokenize(task))];
 
   if (taskKeywords.length === 0) {
     return {
@@ -33,46 +31,52 @@ function calculateRelevance(element, task) {
     };
   }
 
-  // Combine useful DOM information
-  const elementText = [
-    element.text,
-    element.tag,
-    element.type,
-    element.role
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const textKeywords = tokenize(element.text);
+  const tagKeywords = tokenize(element.tag);
+  const typeKeywords = tokenize(element.type);
+  const roleKeywords = tokenize(element.role);
 
-  const elementKeywords = tokenize(elementText);
+  let score = 0;
 
-  const overlapCount = taskKeywords.filter(keyword =>
-    elementKeywords.includes(keyword)
-  ).length;
+  for (const keyword of taskKeywords) {
+    if (textKeywords.includes(keyword)) {
+      score += 1;
+      continue;
+    }
 
-  const score = overlapCount / taskKeywords.length;
+    if (typeKeywords.includes(keyword)) {
+      score += 0.6;
+      continue;
+    }
+
+    if (roleKeywords.includes(keyword)) {
+      score += 0.5;
+      continue;
+    }
+
+    if (tagKeywords.includes(keyword)) {
+      score += 0.3;
+    }
+  }
+
+  let relevanceScore = score / taskKeywords.length;
+
+  const confidence = Number(element.confidence);
+
+  if (!Number.isNaN(confidence)) {
+    relevanceScore *= confidence;
+  }
+
+  relevanceScore = Math.min(relevanceScore, 1);
 
   return {
-    relevance_score: Math.min(score, 1),
-    relevant: score > 0
+    relevance_score: relevanceScore,
+    relevant: relevanceScore > RELEVANCE_THRESHOLD
   };
-}
-
-// Score all elements
-function findRelevantElements(elements, task) {
-  return elements.map(element => {
-    const { relevance_score, relevant } =
-      calculateRelevance(element, task);
-
-    return {
-      element,
-      relevant,
-      relevance_score
-    };
-  });
 }
 
 module.exports = {
   tokenize,
   calculateRelevance,
-  findRelevantElements
+  RELEVANCE_THRESHOLD
 };

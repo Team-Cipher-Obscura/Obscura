@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Obscura",
+  "version": "0.1.0",
+  "description": "Privacy-preserving browser agent with coordinated capture and DOM perception.",
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ]
+}

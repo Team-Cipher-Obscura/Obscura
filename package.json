@@ -1,0 +1,19 @@
+{
+  "name": "person3-privacy-firewall",
+  "version": "0.1.0",
+  "description": "Local Privacy Firewall — on-device scan/redact module (Person 3) for the browser agent pipeline",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "test": "node test/run.js"
+  },
+  "dependencies": {
+    "@tensorflow-models/blazeface": "^0.1.0",
+    "@tensorflow/tfjs": "^4.22.0",
+    "@tensorflow/tfjs-backend-cpu": "^4.22.0",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "canvas": "^3.2.3",
+    "tesseract.js": "^5.1.1"
+  },
+  "notes": "OCR (Tesseract.js) and face detection (BlazeFace/TensorFlow.js) are fully wired in Step 4 with real pretrained models — see README.md for status."
+}

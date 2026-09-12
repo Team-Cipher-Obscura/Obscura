@@ -14,35 +14,50 @@ function hasElementChanged(current, previous) {
         return true;
     }
 
-    return false;
+    // Element type changed
+    if (current.type !== previous.type) {
+        return true;
     }
 
-    function detectChanges(elements, previousState) {
+    // ARIA role changed
+    if (current.role !== previous.role) {
+        return true;
+    }
+
+    return false;
+}
+
+
+function detectChanges(elements, previousState) {
     return elements.map(element => ({
         element,
         changed: hasElementChanged(
-        element,
-        previousState[element.id]
+            element,
+            previousState[element.id]
         )
     }));
-    }
+}
 
-    function buildPreviousState(elements) {
+
+function buildPreviousState(elements) {
     const state = {};
 
     for (const element of elements) {
         state[element.id] = {
-        id: element.id,
-        text: element.text,
-        bbox: element.bbox
+            id: element.id,
+            text: element.text,
+            bbox: element.bbox,
+            type: element.type,
+            role: element.role
         };
     }
 
     return state;
-    }
+}
 
-    module.exports = {
+
+module.exports = {
     hasElementChanged,
     detectChanges,
     buildPreviousState
-    };
+};

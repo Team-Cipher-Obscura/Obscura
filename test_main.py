@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 from main import app
+from unittest.mock import patch
 
 client = TestClient(app)
 
@@ -30,3 +31,14 @@ def test_missing_elements_returns_422():
     bad = {k: v for k, v in VALID_PAYLOAD.items() if k != "elements"}
     resp = client.post("/agent/reason", json=bad)
     assert resp.status_code == 422
+
+def test_low_confidence_returns_wait():
+    fake_low_confidence_response = '{"action": "click", "target_id": "el_b02e7d", "confidence": 0.2, "metadata": {}}'
+    with patch("main.call_vlm", return_value=fake_low_confidence_response):
+        resp = client.post("/agent/reason", json=VALID_PAYLOAD)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["action"] == "wait"
+    assert body["target_id"] is None
+    assert body["confidence"] == 0.2

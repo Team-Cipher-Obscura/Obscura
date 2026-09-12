@@ -44,6 +44,18 @@ def test_low_confidence_returns_wait():
     assert body["confidence"] == 0.2
 
 
+def test_type_on_sensitive_field_is_blocked():
+    fake_response = '{"action": "type", "target_id": "el_a91f3c", "confidence": 0.9, "metadata": {"value": "hallucinated_password"}}'
+    with patch("main.call_vlm", return_value=fake_response):
+        resp = client.post("/agent/reason", json=VALID_PAYLOAD)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["action"] == "wait"
+    assert body["target_id"] is None
+    assert body["metadata"].get("reason") == "sensitive_field_requires_user"
+
+
 def test_all_unchanged_skips_vlm_call():
     payload = {
         "task": "Find Mumbai flight",

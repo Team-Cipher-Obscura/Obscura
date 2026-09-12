@@ -3,7 +3,7 @@ from fastapi import FastAPI, HTTPException
 from model import AgentRequest, AgentResponse
 from services.prompt_builder import build_prompt
 from services.vlm import call_vlm
-from services.validator import parse_and_validate, VLMOutputError
+from services.validator import parse_and_validate, VLMOutputError, SensitiveActionBlocked
 from services.status import make_status
 
 logging.basicConfig(level=logging.INFO)
@@ -34,9 +34,11 @@ def reason(payload: AgentRequest):
         logger.error("status=%s", make_status("error", payload.task, str(e)))
         raise HTTPException(status_code=504, detail="VLM request failed or timed out")
 
-    valid_ids = {e.id for e in payload.elements}
     try:
-        action = parse_and_validate(raw, valid_ids)
+        action = parse_and_validate(raw, payload.elements)
+    except SensitiveActionBlocked as e:
+        logger.warning("Blocked sensitive-field action, handing back to user: %s", e)
+        return AgentResponse(action="wait", target_id=None, confidence=0.0, metadata={"reason": "sensitive_field_requires_user"})
     except VLMOutputError as e:
         logger.error("Invalid VLM output: %s", e)
         raise HTTPException(status_code=502, detail=str(e))

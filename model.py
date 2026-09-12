@@ -1,5 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, List, Literal
+import base64
 
 class Element(BaseModel):
     id: str
@@ -18,6 +19,17 @@ class AgentRequest(BaseModel):
     task: str
     elements: List[Element]
     screenshot: Optional[str] = None
+
+    @field_validator("screenshot")
+    @classmethod
+    def validate_screenshot(cls, v):
+        if v is None:
+            return v
+        try:
+            base64.b64decode(v, validate=True)
+        except Exception:
+            raise ValueError("screenshot must be valid base64")
+        return v
 
 class AgentResponse(BaseModel):
     action: Literal["click", "type", "scroll", "navigate", "wait"]

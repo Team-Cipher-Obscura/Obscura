@@ -15,6 +15,8 @@ app = FastAPI()
 def root():
     return {"status": "ok"}
 
+CONFIDENCE_THRESHOLD = 0.5
+
 @app.post("/agent/reason", response_model=AgentResponse)
 def reason(payload: AgentRequest):
     logger.info("task=%s num_elements=%d", payload.task, len(payload.elements))
@@ -33,6 +35,10 @@ def reason(payload: AgentRequest):
     except VLMOutputError as e:
         logger.error("Invalid VLM output: %s", e)
         raise HTTPException(status_code=502, detail=str(e))
+
+    if action.confidence < CONFIDENCE_THRESHOLD:
+        logger.warning("Low confidence (%.2f) — returning wait instead of %s", action.confidence, action.action)
+        action = AgentResponse(action="wait", target_id=None, confidence=action.confidence, metadata={})
 
     logger.info("action=%s target_id=%s confidence=%.2f", action.action, action.target_id, action.confidence)
     return action

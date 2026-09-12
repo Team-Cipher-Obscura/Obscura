@@ -2,11 +2,12 @@ from google import genai
 from google.genai import types
 from config import VLM_API_KEY, VLM_MODEL_NAME
 import base64
+import time
 
 client = genai.Client(api_key=VLM_API_KEY)
 
 
-def call_vlm(prompt: str, screenshot_b64: str | None) -> str:
+def call_vlm(prompt: str, screenshot_b64: str | None, max_retries: int = 2) -> str:
     contents = [prompt]
 
     if screenshot_b64:
@@ -19,9 +20,17 @@ def call_vlm(prompt: str, screenshot_b64: str | None) -> str:
             )
         )
 
-    response = client.models.generate_content(
-        model=VLM_MODEL_NAME,
-        contents=contents
-    )
+    last_error = None
+    for attempt in range(max_retries + 1):
+        try:
+            response = client.models.generate_content(
+                model=VLM_MODEL_NAME,
+                contents=contents
+            )
+            return response.text
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries:
+                time.sleep(1.5 * (attempt + 1))
 
-    return response.text
+    raise last_error

@@ -10,28 +10,35 @@
 import { createWorker } from "tesseract.js";
 import { checkRegex } from "./regex.js";
 import { toLoadableImage } from "../imageUtils.js";
-import { fileURLToPath } from "url";
 
 // Reuse the same regex patterns as element-text checks so OCR-detected
 // text is judged sensitive/not-sensitive by the same rules.
 export { checkRegex as looksSensitive };
 
-const LOCAL_TESSDATA_DIR = fileURLToPath(new URL("../../models/tessdata/", import.meta.url));
+const isExtension = typeof chrome !== "undefined" && !!chrome.runtime?.getURL;
+
+// Resolves where models/tessdata/ actually lives, depending on environment.
+// - Extension: the folder ships as a bundled asset; langPath needs a URL
+//   reachable via chrome.runtime.getURL(), not a filesystem path.
+// - Node (npm test / view-redaction.js): a real local path, read straight
+//   off disk — zero network access either way.
+async function getTessdataPath() {
+  if (isExtension) {
+    return chrome.runtime.getURL("models/tessdata/");
+  }
+  const { fileURLToPath } = await import("url");
+  return fileURLToPath(new URL("../../models/tessdata/", import.meta.url));
+}
 
 // One worker, reused across frames/cycles — spinning up a worker per frame
 // would be far too slow for a real-time pipeline.
 let workerPromise = null;
 function getWorker() {
   if (!workerPromise) {
-    // langPath points at a LOCAL folder (models/tessdata/), not a URL.
-    // This means zero network access at runtime — the model is loaded
-    // once, straight off disk, every time. This is the "install once"
-    // setup: in the real extension, models/tessdata/ ships as a bundled
-    // asset inside the extension package, loaded via
-    // chrome.runtime.getURL("models/tessdata/") instead of a local path.
-    workerPromise = createWorker("eng", 1, {
-      langPath: LOCAL_TESSDATA_DIR,
-    });
+    workerPromise = (async () => {
+      const langPath = await getTessdataPath();
+      return createWorker("eng", 1, { langPath });
+    })();
   }
   return workerPromise;
 }

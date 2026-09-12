@@ -32,3 +32,40 @@ export async function fileToBase64(path) {
   const { readFileSync } = await import("fs");
   return readFileSync(path).toString("base64");
 }
+
+/**
+ * Browser-only. Decodes a base64/data-URL image into an OffscreenCanvas,
+ * using only APIs that exist in a content script (no Node Buffer, no
+ * node-canvas). Shared by redact.js and faceDetection.js so both draw the
+ * frame exactly the same way.
+ */
+export async function base64ToOffscreenCanvas(input) {
+  const raw = input.startsWith("data:") ? input.slice(input.indexOf(",") + 1) : input;
+  const mime = raw.startsWith("/9j/") ? "image/jpeg" : "image/png";
+
+  const binary = atob(raw);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+  const blob = new Blob([bytes], { type: mime });
+  const bitmap = await createImageBitmap(blob);
+
+  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+  canvas.getContext("2d").drawImage(bitmap, 0, 0);
+  return canvas;
+}
+
+/**
+ * Browser-only. Encodes an ArrayBuffer as base64 without Node's Buffer —
+ * btoa only accepts a binary string, so bytes are chunked through
+ * String.fromCharCode to avoid blowing the call stack on large screenshots.
+ */
+export function arrayBufferToBase64(buf) {
+  let binary = "";
+  const bytes = new Uint8Array(buf);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}

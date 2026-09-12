@@ -66,23 +66,55 @@ function elementChanged(current, cached) {
   );
 }
 
+const isExtension = typeof chrome !== "undefined" && !!chrome.runtime?.getURL;
+
 /**
  * Blurs/masks flagged regions on the screenshot. Screenshot dimensions
  * always equal input dimensions on output — never resized/cropped.
  *
- * NODE (this file): uses node-canvas, for local testing.
- * BROWSER (the real extension): swap `createCanvas`/`loadImage` for the
- * native `OffscreenCanvas` + `createImageBitmap` — the pixel-manipulation
- * logic below (getImageData/putImageData, box blur, black-box mask) is
- * identical in both environments.
+ * Runs one of two paths depending on environment:
+ *  - extension (content script): OffscreenCanvas + createImageBitmap
+ *  - Node (npm test / view-redaction.js): node-canvas
+ * The pixel-manipulation logic (fillRect black-box mask) is identical in
+ * both — only image decode/encode differs.
  *
  * @param {string} imagePath - path or base64 image; a black box is drawn
  *   over each flagged region (simpler and more reliable to verify than a
  *   true gaussian blur, and equally effective for redaction).
  * @param {Array<{x:number,y:number,width:number,height:number}>} regions
- * @returns {Promise<{ buffer: Buffer, width: number, height: number }>}
+ * @returns {Promise<{ buffer: {toString: Function}, width: number, height: number }>}
  */
 export async function redactScreenshot(imagePath, regions) {
+  return isExtension
+    ? redactScreenshotBrowser(imagePath, regions)
+    : redactScreenshotNode(imagePath, regions);
+}
+
+async function redactScreenshotBrowser(imagePath, regions) {
+  const { base64ToOffscreenCanvas, arrayBufferToBase64 } = await import("./imageUtils.js");
+  const canvas = await base64ToOffscreenCanvas(imagePath);
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = "black";
+  for (const region of regions || []) {
+    if (!region) continue;
+    ctx.fillRect(region.x, region.y, region.width, region.height);
+  }
+
+  const outBlob = await canvas.convertToBlob({ type: "image/png" });
+  const outBuffer = await outBlob.arrayBuffer();
+  const base64Out = arrayBufferToBase64(outBuffer);
+
+  // Duck-types node-canvas's Buffer return so index.js's shared
+  // `buffer.toString("base64")` call works unmodified in both paths.
+  return {
+    buffer: { toString: () => base64Out },
+    width: canvas.width,
+    height: canvas.height,
+  };
+}
+
+async function redactScreenshotNode(imagePath, regions) {
   const { createCanvas, loadImage } = await import("canvas");
   const { toLoadableImage } = await import("./imageUtils.js");
   const image = await loadImage(toLoadableImage(imagePath));

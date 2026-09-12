@@ -1,8 +1,12 @@
 // index.js
-// Entry point. In the real extension this listens for messages from P2
-// (chrome.runtime.onMessage or similar). For now it exposes a plain
-// `processFrame` function so it can be tested with mocks/ payloads before
-// P1's messaging layer exists (Step 9).
+// Entry point. Exposes processFrame() so it can be called directly:
+//  - test/run.js and view-redaction.js call it against mocks/ for testing
+//  - content.js imports it and calls it inside its P1_CAPTURE_CYCLE
+//    listener, which owns the actual message wiring and cycle_id handling
+//    for the real extension. There is no separate onMessage listener here
+//    — an earlier draft of this file had one for a "P2_FRAME" message with
+//    no cycle_id, superseded once P1/P3 agreed the elements arrive directly
+//    on P1_CAPTURE_CYCLE's payload instead.
 
 import { checkDomAttribute } from "./checks/domAttribute.js";
 import { checkRegex } from "./checks/regex.js";
@@ -38,8 +42,6 @@ export async function processFrame(frame) {
 
   const { buffer, width, height } = await redactScreenshot(screenshot, regions);
   // Guard invariant from the spec: screenshot is never resized/cropped.
-  // (In the browser build, compare against the *decoded* input image's
-  // natural dimensions the same way — this check must never be skipped.)
   const sanitizedScreenshot = buffer.toString("base64");
 
   return {
@@ -48,39 +50,4 @@ export async function processFrame(frame) {
     toP6: buildP6Payload(redactedElements),
     _debug: { outputWidth: width, outputHeight: height },
   };
-}
-
-// Real extension wiring (Step 9). Guarded by `typeof chrome !== "undefined"`
-// so this file still works when imported directly in Node for testing
-// (test/run.js, view-redaction.js) — the listener only activates when
-// actually running as the extension's background script.
-if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type !== "P2_FRAME") return;
-
-    processFrame(message.payload).then((result) => {
-      // -> Person 4: full sanitized elements + screenshot
-      chrome.runtime.sendMessage({ type: "P4_INPUT", payload: result.toP4 });
-
-      // -> Person 1's popup.js listens for a FLAT "PRIVACY_COUNTERS"
-      // message (see their popup.js: `message.pii_detected_count`, not
-      // `message.payload.pii_detected_count`) — so these fields go
-      // directly on the message object, not nested.
-      chrome.runtime.sendMessage({
-        type: "PRIVACY_COUNTERS",
-        pii_detected_count: result.toP1.pii_detected_count,
-        redacted_count: result.toP1.redacted_count,
-        sent_to_ai_count: result.toP1.sent_to_ai_count,
-        // privacy_status and sensitive_types are also here in case their
-        // UI wants them later — popup.js currently ignores extra fields.
-        privacy_status: result.toP1.privacy_status,
-        sensitive_types: result.toP1.sensitive_types,
-      });
-
-      // -> Person 6: sensitive element id map (defense-in-depth)
-      chrome.runtime.sendMessage({ type: "P6_SENSITIVE_MAP", payload: result.toP6 });
-    });
-
-    return true; // keep the message channel open for the async response above
-  });
 }

@@ -4,80 +4,79 @@
 // ONNX" from the spec). Unscoped — runs on the WHOLE screenshot every
 // cycle, same rationale as ocr.js.
 //
-// NODE (this file, for local testing) uses the pure-JS CPU backend and a
-// locally cached copy of the model (see models/blazeface/ and the loader
-// below) because this sandbox's network blocks the default model host
-// (storage.googleapis.com / tfhub.dev).
+// Extension: WebGL backend for real-time speed, model loaded from the
+// extension's own bundled models/blazeface/ via chrome.runtime.getURL —
+// zero network dependency at runtime (privacy-focused extension, and this
+// sandbox's network blocks the default model host anyway).
 //
-// BROWSER (the real extension) should instead:
-//   - use '@tensorflow/tfjs-backend-webgl' or '-wasm' for real-time speed
-//   - let blazeface.load() hit its default CDN URL (unblocked for a real
-//     user's browser) OR bundle the model files with the extension so
-//     there's zero network dependency at runtime — recommended for a
-//     privacy-focused extension anyway.
+// Node (npm test / view-redaction.js): pure-JS CPU backend + a manual
+// IOHandler reading the same files straight off local disk, since there's
+// no tfjs-node in this environment.
 
-import "@tensorflow/tfjs-backend-cpu";
 import * as tf from "@tensorflow/tfjs";
 import * as blazeface from "@tensorflow-models/blazeface";
-import { fileURLToPath } from "url";
-import { readFileSync } from "fs";
-import { createCanvas, loadImage } from "canvas";
-import { toLoadableImage } from "../imageUtils.js";
+import { toLoadableImage, base64ToOffscreenCanvas } from "../imageUtils.js";
 
-const LOCAL_MODEL_DIR = fileURLToPath(new URL("../../models/blazeface/", import.meta.url));
+const isExtension = typeof chrome !== "undefined" && !!chrome.runtime?.getURL;
 
 let modelPromise = null;
 function getModel() {
   if (!modelPromise) {
-    modelPromise = (async () => {
-      await tf.setBackend("cpu");
-      // In the browser extension, swap this for the default CDN URL (or a
-      // bundled-with-the-extension copy) — this manual file handler exists
-      // only because this Node test environment has no network access to
-      // the default model host and no tfjs-node for its built-in file loader.
-      return blazeface.load({ modelUrl: localModelIOHandler(LOCAL_MODEL_DIR) });
-    })();
+    modelPromise = isExtension ? loadModelBrowser() : loadModelNode();
   }
   return modelPromise;
 }
 
-// Minimal manual IOHandler so plain @tensorflow/tfjs (no tfjs-node) can load
-// model files straight off disk in this Node test environment.
-function localModelIOHandler(dir) {
-  return {
-    load: async () => {
-      const modelJson = JSON.parse(readFileSync(dir + "model.json", "utf8"));
-      const manifest = modelJson.weightsManifest[0];
-      const buffers = manifest.paths.map((p) => readFileSync(dir + p));
-      const weightData = Buffer.concat(buffers).buffer;
-      return {
-        modelTopology: modelJson.modelTopology,
-        weightSpecs: manifest.weights,
-        weightData,
-        format: modelJson.format,
-        generatedBy: modelJson.generatedBy,
-        convertedBy: modelJson.convertedBy,
-      };
+async function loadModelBrowser() {
+  await import("@tensorflow/tfjs-backend-webgl");
+  await tf.setBackend("webgl");
+  const modelUrl = chrome.runtime.getURL("models/blazeface/model.json");
+  return blazeface.load({ modelUrl });
+}
+
+async function loadModelNode() {
+  await import("@tensorflow/tfjs-backend-cpu");
+  await tf.setBackend("cpu");
+  const { fileURLToPath } = await import("url");
+  const { readFileSync } = await import("fs");
+  const dir = fileURLToPath(new URL("../../models/blazeface/", import.meta.url));
+
+  // Minimal manual IOHandler so plain @tensorflow/tfjs (no tfjs-node) can
+  // load model files straight off disk in this Node test environment.
+  return blazeface.load({
+    modelUrl: {
+      load: async () => {
+        const modelJson = JSON.parse(readFileSync(dir + "model.json", "utf8"));
+        const manifest = modelJson.weightsManifest[0];
+        const buffers = manifest.paths.map((p) => readFileSync(dir + p));
+        const weightData = Buffer.concat(buffers).buffer;
+        return {
+          modelTopology: modelJson.modelTopology,
+          weightSpecs: manifest.weights,
+          weightData,
+          format: modelJson.format,
+          generatedBy: modelJson.generatedBy,
+          convertedBy: modelJson.convertedBy,
+        };
+      },
     },
-  };
+  });
 }
 
 /**
- * @param {string} imagePath - path to a PNG/JPEG file (base64 data URLs also
- *   accepted in the browser version; this Node version reads from disk via
- *   node-canvas for testing).
+ * @param {string} imageInput - base64 PNG/JPEG string or data URL (browser);
+ *   also accepts a file path in the Node test path via node-canvas.
  * @returns {Promise<Array<{ bbox: {x:number,y:number,width:number,height:number}, confidence: number }>>}
  */
-export async function detectFaces(imagePath) {
-  if (!imagePath) return [];
+export async function detectFaces(imageInput) {
+  if (!imageInput) return [];
 
   const model = await getModel();
-  const image = await loadImage(toLoadableImage(imagePath));
-  const canvas = createCanvas(image.width, image.height);
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(image, 0, 0);
+  const source = isExtension
+    ? await base64ToOffscreenCanvas(imageInput)
+    : await loadNodeCanvas(imageInput);
 
-  const predictions = await model.estimateFaces(canvas, false);
+  const predictions = await model.estimateFaces(source, false);
 
   return predictions.map((p) => {
     const [x, y] = p.topLeft;
@@ -87,4 +86,12 @@ export async function detectFaces(imagePath) {
       confidence: Array.isArray(p.probability) ? p.probability[0] : p.probability,
     };
   });
+}
+
+async function loadNodeCanvas(imageInput) {
+  const { createCanvas, loadImage } = await import("canvas");
+  const image = await loadImage(toLoadableImage(imageInput));
+  const canvas = createCanvas(image.width, image.height);
+  canvas.getContext("2d").drawImage(image, 0, 0);
+  return canvas;
 }

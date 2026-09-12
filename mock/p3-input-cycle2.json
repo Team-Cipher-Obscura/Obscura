@@ -48,7 +48,7 @@
       "tag": "div",
       "type": null,
       "role": "text",
-      "text": "Mumbai International Airport",
+      "text": "Mumbai Airport",
       "bbox": [100, 400, 250, 40],
       "confidence": 0.96,
       "sensitive": false

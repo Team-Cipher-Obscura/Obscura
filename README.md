@@ -79,11 +79,12 @@ P1 provides:
 P4 produces:
 
 {
-  "frame_id": "...",
-  "task": "...",
-  "elements": [...],
-  "sanitized_regions": [...],
-  "screenshot": "..."
+  "frame_id": "f_00042",
+  "task": "Find Mumbai flight",
+  "elements": [
+    "filtered P3 elements"
+  ],
+  "screenshot": "<base64 sanitized image>"
 }
 
 The elements selected by P4 are passed through without modification.

@@ -17,6 +17,7 @@ function tokenize(text) {
     .toLowerCase()
     .split(/\s+/)
     .map(word => word.replace(/[^\w]/g, ""))
+    .map(word => word.replace(/s$/, ""))
     .filter(word => word.length > 0)
     .filter(word => !STOPWORDS.has(word));
 }
@@ -31,11 +32,11 @@ function calculateRelevance(element, task) {
     };
   }
 
+  // V1: use text + lightweight DOM semantics for task relevance
   const textKeywords = tokenize(element.text);
   const tagKeywords = tokenize(element.tag);
   const typeKeywords = tokenize(element.type);
   const roleKeywords = tokenize(element.role);
-
   let score = 0;
 
   for (const keyword of taskKeywords) {

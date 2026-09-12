@@ -20,18 +20,16 @@ function filterElements(p3Output, task, previousState = {}) {
   );
 
   const filteredElements = relevanceResults
-    .filter(result => {
-      const changed = changeMap.get(result.element.id);
-
-      return result.relevant || changed;
-    })
-    .map(result => result.element);
+    .filter(result => result.relevant)
+    .map(result => ({
+      ...result.element,
+      changed: changeMap.get(result.element.id) ?? false
+    }));
 
   return {
     frame_id: p3Output.frame_id,
     task,
     elements: filteredElements,
-    sanitized_regions: p3Output.sanitized_regions,
     screenshot: p3Output.screenshot
   };
 }

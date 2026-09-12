@@ -10,12 +10,23 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
+        "js": [
+  "p2/dom/stableIds.js",
+  "p2/dom/extractElements.js",
+  "dist/p2-vision.js",
+  "p2/fusion/domVisionFusion.js",
+  "content.js"
+]
+    }
+  ],
 
-      "js": [
-        "p2/dom/stableIds.js",
-        "p2/dom/extractElements.js",
-        "content.js"
-      ]
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "p2/vision/ort/*",
+        "p2/vision/yolo26n.onnx"
+      ],
+      "matches": ["<all_urls>"]
     }
   ]
 }

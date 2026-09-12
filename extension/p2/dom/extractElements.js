@@ -169,8 +169,10 @@ function extractElementInfo(element) {
 function extractAllElements() {
 
   const candidates = document.querySelectorAll(
-    "button, input, textarea, select, a, h1, h2, h3, h4, h5, h6"
-  );
+  "button, input, textarea, select, a, " +
+  "h1, h2, h3, h4, h5, h6, " +
+  "img, video, canvas"
+);
 
   const elements = [];
 
@@ -186,3 +188,10 @@ function extractAllElements() {
 
   return elements;
 }
+globalThis.P2DOM = {
+  extractAllElements,
+  extractElementInfo,
+  getElementText,
+  getElementRole,
+  getViewportBBox
+};

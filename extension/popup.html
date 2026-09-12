@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Obscura</title>
+
+  <style>
+    body {
+      width: 280px;
+      font-family: system-ui, sans-serif;
+      padding: 12px;
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 15px;
+      margin: 0 0 10px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 6px;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+
+    button {
+      width: 100%;
+      padding: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      margin-bottom: 12px;
+    }
+
+    #status {
+      font-size: 12px;
+      line-height: 1.5;
+      background: #f4f4f4;
+      padding: 8px;
+      border-radius: 6px;
+      white-space: pre-wrap;
+    }
+
+    .counters {
+      font-size: 12px;
+      margin-top: 8px;
+    }
+
+    .counters div {
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>Obscura</h1>
+
+  <input
+    id="taskInput"
+    type="text"
+    placeholder="e.g. Find Mumbai flight"
+  />
+
+  <button id="startBtn">
+    Start capture cycle
+  </button>
+
+  <div id="status">
+    Idle. Enter a task and click start.
+  </div>
+
+  <div class="counters">
+    <div>
+      <span>PII detected</span>
+      <span id="piiCount">0</span>
+    </div>
+
+    <div>
+      <span>Redacted</span>
+      <span id="redactedCount">0</span>
+    </div>
+
+    <div>
+      <span>Sent to AI</span>
+      <span id="sentCount">0</span>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+
+</body>
+</html>

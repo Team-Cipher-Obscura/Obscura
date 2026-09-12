@@ -42,3 +42,22 @@ def test_low_confidence_returns_wait():
     assert body["action"] == "wait"
     assert body["target_id"] is None
     assert body["confidence"] == 0.2
+
+
+def test_all_unchanged_skips_vlm_call():
+    payload = {
+        "task": "Find Mumbai flight",
+        "elements": [
+            {"id": "el_c13f8a", "tag": "div", "role": "text", "text": "Flights",
+             "bbox": [100,200,300,40], "confidence": 0.95, "sensitive": False, "changed": False},
+        ],
+        "screenshot": None
+    }
+    with patch("main.call_vlm") as mock_vlm:
+        resp = client.post("/agent/reason", json=payload)
+        mock_vlm.assert_not_called()
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["action"] == "wait"
+    assert body["confidence"] == 1.0

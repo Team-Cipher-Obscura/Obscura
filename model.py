@@ -13,6 +13,7 @@ class Element(BaseModel):
     sensitive: bool = False
     sensitive_type: Optional[str] = None
     detected_by: Optional[str] = None
+    changed: Optional[bool] = None
 
 class AgentRequest(BaseModel):
     frame_id: Optional[str] = None

@@ -20,6 +20,11 @@ CONFIDENCE_THRESHOLD = 0.5
 @app.post("/agent/reason", response_model=AgentResponse)
 def reason(payload: AgentRequest):
     logger.info("task=%s num_elements=%d", payload.task, len(payload.elements))
+
+    if payload.elements and all(e.changed is False for e in payload.elements):
+        logger.info("No changed elements — skipping VLM call")
+        return AgentResponse(action="wait", target_id=None, confidence=1.0, metadata={})
+
     logger.info("status=%s", make_status("processing", payload.task))
     prompt = build_prompt(payload.task, payload.elements)
 

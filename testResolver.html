@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+  <button data-agent-id="el_submit">Submit</button>
+
+  <input data-agent-id="el_name" placeholder="Name">
+
+  <input
+    data-agent-id="el_password"
+    type="password"
+    disabled
+  >
+
+  <button
+    data-agent-id="el_hidden"
+    style="display: none;"
+  >
+    Hidden
+  </button>
+
+    <button data-agent-id="el_dynamic">
+    Dynamic Button
+    </button>
+
+    <button
+    data-agent-id="el_covered"
+    style="position: absolute; top: 200px; left: 100px;"
+    >
+    Covered Button
+    </button>
+
+    <div
+    style="
+        position: absolute;
+        top: 200px;
+        left: 100px;
+        width: 150px;
+        height: 40px;
+        background: white;
+        z-index: 10;
+    "
+    >
+    Overlay
+    </div>
+
+  <script type="module">
+    import { resolveTarget } from "./targetResolver.js";
+
+    console.log(
+      "Submit:",
+      resolveTarget("el_submit")
+    );
+
+    console.log(
+      "Missing:",
+      resolveTarget("does_not_exist")
+    );
+
+    console.log(
+      "Disabled:",
+      resolveTarget("el_password")
+    );
+
+    console.log(
+      "Hidden:",
+      resolveTarget("el_hidden")
+    );
+
+    console.log(
+    "Before rerender:",
+    resolveTarget("el_dynamic")
+    );
+
+    const oldElement = document.querySelector(
+    '[data-agent-id="el_dynamic"]'
+    );
+
+    oldElement.outerHTML = `
+    <button data-agent-id="el_dynamic">
+        New Dynamic Button
+    </button>
+    `;
+
+    console.log(
+    "After rerender:",
+    resolveTarget("el_dynamic")
+    );
+
+    console.log(
+    "Covered:",
+    resolveTarget("el_covered")
+    );
+    </script>
+
+</body>
+</html>

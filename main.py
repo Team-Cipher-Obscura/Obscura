@@ -1,5 +1,6 @@
 import logging
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from model import AgentRequest, AgentResponse
 from services.prompt_builder import build_prompt
 from services.vlm import call_vlm
@@ -10,6 +11,16 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("agent")
 
 app = FastAPI()
+
+# Allows the Chrome extension (content scripts run in a page's origin, e.g.
+# chrome-extension://<id>) to call this API directly. Without this, browsers
+# will silently block the fetch() with a CORS error before it ever reaches us.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # tighten to the extension's exact chrome-extension://<id> origin before submission if possible
+    allow_methods=["POST", "GET", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def root():

@@ -15,7 +15,7 @@ app = FastAPI()
 def root():
     return {"status": "ok"}
 
-CONFIDENCE_THRESHOLD = 0.5
+CONFIDENCE_THRESHOLD = 0.3
 
 @app.post("/agent/reason", response_model=AgentResponse)
 def reason(payload: AgentRequest):

@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>P6 Action Pipeline Test</title>
+</head>
+
+<body>
+
+  <h1>P6 Action Pipeline Test</h1>
+
+  <input
+    data-agent-id="el_name"
+    id="nameInput"
+    placeholder="Name"
+  >
+
+  <p id="output">
+    Nothing clicked yet.
+  </p>
+
+  <button
+    data-agent-id="el_safe"
+    id="safeButton"
+  >
+    Click Me
+  </button>
+
+  <button
+    data-agent-id="el_delete"
+    id="deleteButton"
+  >
+    Delete Account
+  </button>
+
+  <input
+    data-agent-id="el_password"
+    type="password"
+  >
+
+
+  <script type="module">
+
+    import {
+      processAction
+    } from "../actionPipeline.js";
+
+    import {
+      update
+    } from "../sensitiveRegistry.js";
+
+
+    // -----------------------------------------
+    // Mock P3 sensitive information
+    // -----------------------------------------
+
+    update({
+      sensitive_element_ids: [
+        "el_password"
+      ],
+
+      types: {
+        el_password: "password_field"
+      }
+    });
+
+
+    // -----------------------------------------
+    // Button click listener
+    // -----------------------------------------
+
+    document
+      .getElementById("safeButton")
+      .addEventListener("click", () => {
+
+        document.getElementById("output")
+          .textContent =
+          "Button clicked successfully.";
+
+      });
+
+
+    // -----------------------------------------
+    // 1. SAFE CLICK
+    // -----------------------------------------
+
+    const safeClick = {
+      action: "click",
+      target_id: "el_safe",
+      confidence: 0.95,
+      metadata: {}
+    };
+
+
+    const safeResult =
+      processAction(safeClick);
+
+
+    console.log(
+      "Safe click:",
+      safeResult
+    );
+
+
+    console.assert(
+      safeResult.status === "EXECUTED",
+      "Safe click should execute"
+    );
+
+
+    // -----------------------------------------
+    // 2. RISKY DELETE
+    // -----------------------------------------
+
+    const deleteAction = {
+      action: "click",
+      target_id: "el_delete",
+      confidence: 0.95,
+      metadata: {}
+    };
+
+
+    const deleteResult =
+      processAction(deleteAction);
+
+
+    console.log(
+      "Delete:",
+      deleteResult
+    );
+
+
+    console.assert(
+      deleteResult.status === "CONFIRMATION_PENDING",
+      "Delete should require confirmation"
+    );
+
+
+    // -----------------------------------------
+    // 3. P3 SENSITIVE ELEMENT
+    // -----------------------------------------
+
+    const sensitiveAction = {
+      action: "click",
+      target_id: "el_password",
+      confidence: 0.99,
+      metadata: {}
+    };
+
+
+    const sensitiveResult =
+      processAction(sensitiveAction);
+
+
+    console.log(
+      "Sensitive element:",
+      sensitiveResult
+    );
+
+
+    console.assert(
+      sensitiveResult.status === "BLOCKED",
+      "Sensitive element MUST be blocked"
+    );
+
+
+    // -----------------------------------------
+    // 4. INVALID TARGET
+    // -----------------------------------------
+
+    const invalidAction = {
+      action: "click",
+      target_id: "el_missing",
+      confidence: 0.95,
+      metadata: {}
+    };
+
+
+    const invalidResult =
+      processAction(invalidAction);
+
+
+    console.log(
+      "Invalid target:",
+      invalidResult
+    );
+
+
+    console.assert(
+      invalidResult.status === "BLOCKED",
+      "Invalid target should be blocked"
+    );
+
+
+    // -----------------------------------------
+    // 5. SCROLL
+    // -----------------------------------------
+
+    const scrollAction = {
+      action: "scroll",
+      target_id: null,
+      confidence: 0.9,
+      metadata: {
+        direction: "down",
+        amount: 300
+      }
+    };
+
+
+    const scrollResult =
+      processAction(scrollAction);
+
+
+    console.log(
+      "Scroll:",
+      scrollResult
+    );
+
+
+    console.assert(
+      scrollResult.status === "EXECUTED",
+      "Scroll should execute"
+    );
+
+
+    console.log(
+      "===================================="
+    );
+
+    console.log(
+      "P6 Action Pipeline tests completed."
+    );
+
+    console.log(
+      "===================================="
+    );
+
+  </script>
+
+</body>
+
+</html>

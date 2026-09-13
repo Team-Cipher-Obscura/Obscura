@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>P6 Executor Test</title>
+</head>
+
+<body>
+
+  <h1>P6 Executor Test</h1>
+
+  <input
+    id="nameInput"
+    data-agent-id="el_name"
+    placeholder="Name"
+  >
+
+  <p id="output">Nothing clicked yet.</p>
+
+  <button
+    data-agent-id="el_click"
+    id="clickButton"
+  >
+    Click Me
+  </button>
+
+  <button
+    data-agent-id="el_scroll"
+    id="scrollButton"
+  >
+    Scroll
+  </button>
+
+
+  <div style="height: 1500px;">
+    <p>Scroll down to test scrolling.</p>
+  </div>
+
+
+  <script type="module">
+
+    import {
+      executeAction
+    } from "../executor.js";
+
+
+    // -----------------------------------------
+    // Click test
+    // -----------------------------------------
+
+    document
+      .getElementById("clickButton")
+      .addEventListener("click", () => {
+
+        document.getElementById("output").textContent =
+          "Button clicked successfully.";
+
+      });
+
+
+    const clickAction = {
+      action: "click",
+      target_id: "el_click",
+      confidence: 0.95,
+      metadata: {}
+    };
+
+
+    const clickElement =
+      document.querySelector(
+        '[data-agent-id="el_click"]'
+      );
+
+
+    const clickResult =
+      executeAction(
+        clickAction,
+        clickElement
+      );
+
+
+    console.log(
+      "Click result:",
+      clickResult
+    );
+
+
+    console.assert(
+      clickResult.status === "EXECUTED",
+      "Click should execute"
+    );
+
+
+    // -----------------------------------------
+    // Type test
+    // -----------------------------------------
+
+    const typeAction = {
+      action: "type",
+      target_id: "el_name",
+      confidence: 0.95,
+      metadata: {
+        value: "Shaina"
+      }
+    };
+
+
+    const inputElement =
+      document.querySelector(
+        '[data-agent-id="el_name"]'
+      );
+
+
+    const typeResult =
+      executeAction(
+        typeAction,
+        inputElement
+      );
+
+
+    console.log(
+      "Type result:",
+      typeResult
+    );
+
+
+    console.assert(
+      typeResult.status === "EXECUTED",
+      "Type should execute"
+    );
+
+
+    console.assert(
+      inputElement.value === "Shaina",
+      "Input should contain typed value"
+    );
+
+
+    // -----------------------------------------
+    // Scroll test
+    // -----------------------------------------
+
+    const scrollAction = {
+      action: "scroll",
+      target_id: null,
+      confidence: 0.9,
+      metadata: {
+        direction: "down",
+        amount: 500
+      }
+    };
+
+
+    const scrollResult =
+      executeAction(
+        scrollAction,
+        null
+      );
+
+
+    console.log(
+      "Scroll result:",
+      scrollResult
+    );
+
+
+    console.assert(
+      scrollResult.status === "EXECUTED",
+      "Scroll should execute"
+    );
+
+
+    // -----------------------------------------
+    // Wait test
+    // -----------------------------------------
+
+    const waitAction = {
+      action: "wait",
+      target_id: null,
+      confidence: 1.0,
+      metadata: {}
+    };
+
+
+    const waitResult =
+      executeAction(
+        waitAction,
+        null
+      );
+
+
+    console.log(
+      "Wait result:",
+      waitResult
+    );
+
+
+    console.assert(
+      waitResult.status === "EXECUTED",
+      "Wait should execute"
+    );
+
+
+    // -----------------------------------------
+    // Invalid target test
+    // -----------------------------------------
+
+    const invalidClick = {
+      action: "click",
+      target_id: "el_missing",
+      confidence: 0.95,
+      metadata: {}
+    };
+
+
+    const invalidResult =
+      executeAction(
+        invalidClick,
+        null
+      );
+
+
+    console.log(
+      "Invalid target:",
+      invalidResult
+    );
+
+
+    console.assert(
+      invalidResult.status === "FAILED",
+      "Invalid target should fail"
+    );
+
+
+
+    //handle execution errors
+    const wrongTypeAction = {
+    action: "type",
+    target_id: "el_click",
+    confidence: 0.95,
+    metadata: {
+        value: "hello"
+    }
+    };
+
+    const wrongTypeResult =
+    executeAction(
+        wrongTypeAction,
+        document.querySelector(
+        '[data-agent-id="el_click"]'
+        )
+    );
+
+    console.log(
+    "Type into button:",
+    wrongTypeResult
+    );
+
+    console.assert(
+    wrongTypeResult.status === "FAILED",
+    "Typing into a button should fail"
+    );
+
+    //stale element
+    const staleAction = {
+    action: "click",
+    target_id: "el_click",
+    confidence: 0.95,
+    metadata: {}
+    };
+
+    const staleElement =
+    document.querySelector(
+        '[data-agent-id="el_click"]'
+    );
+
+    staleElement.remove();
+
+    const staleResult =
+    executeAction(
+        staleAction,
+        staleElement
+    );
+
+    console.log(
+    "Stale element:",
+    staleResult
+    );
+
+    console.assert(
+    staleResult.status === "FAILED",
+    "Stale element should fail"
+    );
+
+    //unknown action test
+    const unknownAction = {
+    action: "dance",
+    target_id: null,
+    confidence: 0.9,
+    metadata: {}
+    };
+
+    const unknownResult =
+    executeAction(
+        unknownAction,
+        null
+    );
+
+    console.log(
+    "Unknown action:",
+    unknownResult
+    );
+
+    console.assert(
+    unknownResult.status === "FAILED",
+    "Unknown action should fail"
+    );
+
+    
+    console.log(
+      "===================================="
+    );
+
+    console.log(
+      "P6 Executor tests completed."
+    );
+
+    console.log(
+      "===================================="
+    );
+
+  </script>
+
+</body>
+
+</html>

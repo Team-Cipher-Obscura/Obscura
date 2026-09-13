@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>P6 Confirmation Integration Test</title>
+</head>
+
+<body>
+
+  <h1>P6 Confirmation Integration Test</h1>
+
+  <button
+    id="deleteButton"
+    data-agent-id="el_delete"
+  >
+    Delete Account
+  </button>
+
+  <button
+    id="replaceButton"
+    data-agent-id="el_replace"
+  >
+    Replace Me
+  </button>
+
+  <button
+    id="sensitiveButton"
+    data-agent-id="el_sensitive"
+  >
+    Delete Sensitive Account
+  </button>
+
+
+  <script type="module">
+
+    import {
+      processAction
+    } from "../actionPipeline.js";
+
+    import {
+      handleConfirmationResponse,
+      _pendingCountForTesting
+    } from "../confirmationFlow.js";
+
+    import {
+      update,
+      _resetForTesting
+    } from "../sensitiveRegistry.js";
+
+
+    async function testApproval() {
+
+      console.log(
+        "TEST 1: approved risky action"
+      );
+
+      _resetForTesting();
+
+      const sentMessages = [];
+
+      const action = {
+        action: "click",
+        target_id: "el_delete",
+        confidence: 0.95,
+        metadata: {}
+      };
+
+      const promise =
+        processAction(
+          action,
+          {
+            sendMessage: (message) => {
+              sentMessages.push(message);
+            }
+          }
+        );
+
+      console.assert(
+        _pendingCountForTesting() === 1,
+        "Confirmation should be pending"
+      );
+
+      const request =
+        sentMessages[0];
+
+      console.assert(
+        request.type ===
+          "P6_CONFIRMATION_REQUEST",
+        "Wrong confirmation request type"
+      );
+
+      handleConfirmationResponse({
+        type: "P6_CONFIRMATION_RESPONSE",
+        requestId:
+          request.requestId,
+        approved: true
+      });
+
+      const result =
+        await promise;
+
+      console.log(
+        "Approved result:",
+        result
+      );
+
+      console.assert(
+        result.status === "EXECUTED",
+        "Approved risky action should execute"
+      );
+
+      console.assert(
+        _pendingCountForTesting() === 0,
+        "Confirmation should be cleared"
+      );
+    }
+
+
+    async function testDomReplacement() {
+
+      console.log(
+        "TEST 2: DOM replacement while confirmation pending"
+      );
+
+      _resetForTesting();
+
+      const button =
+        document.getElementById(
+          "replaceButton"
+        );
+
+      const sentMessages = [];
+
+      const action = {
+        action: "click",
+        target_id: "el_replace",
+        confidence: 0.95,
+        metadata: {}
+      };
+
+      const promise =
+        processAction(
+          action,
+          {
+            sendMessage: (message) => {
+              sentMessages.push(message);
+            }
+          }
+        );
+
+      console.assert(
+        _pendingCountForTesting() === 1,
+        "Confirmation should be pending"
+      );
+
+      // Replace the DOM node while confirmation is open.
+      button.remove();
+
+      const replacement =
+        document.createElement("button");
+
+      replacement.textContent =
+        "Replacement";
+
+      replacement.setAttribute(
+        "data-agent-id",
+        "el_replace_new"
+      );
+
+      document.body.appendChild(
+        replacement
+      );
+
+      const request =
+        sentMessages[0];
+
+      handleConfirmationResponse({
+        type: "P6_CONFIRMATION_RESPONSE",
+        requestId:
+          request.requestId,
+        approved: true
+      });
+
+      const result =
+        await promise;
+
+      console.log(
+        "DOM replacement result:",
+        result
+      );
+
+      console.assert(
+        result.status === "BLOCKED",
+        "Old target must be blocked after replacement"
+      );
+
+      console.assert(
+        result.reason ===
+          "TARGET_COULD_NOT_BE_RESOLVED",
+        "Expected target revalidation failure"
+      );
+    }
+
+
+    async function testP3Update() {
+
+      console.log(
+        "TEST 3: P3 marks target sensitive while confirmation pending"
+      );
+
+      _resetForTesting();
+
+      const sentMessages = [];
+
+      const action = {
+        action: "click",
+        target_id: "el_sensitive",
+        confidence: 0.95,
+        metadata: {}
+      };
+
+      const promise =
+        processAction(
+          action,
+          {
+            sendMessage: (message) => {
+              sentMessages.push(message);
+            }
+          }
+        );
+
+      console.assert(
+        _pendingCountForTesting() === 1,
+        "Confirmation should be pending"
+      );
+
+      // P3 changes its verdict while confirmation is open.
+      update({
+        sensitive_element_ids: [
+          "el_sensitive"
+        ],
+        types: {
+          el_sensitive: "account_sensitive_data"
+        }
+      });
+
+      const request =
+        sentMessages[0];
+
+      handleConfirmationResponse({
+        type: "P6_CONFIRMATION_RESPONSE",
+        requestId:
+          request.requestId,
+        approved: true
+      });
+
+      const result =
+        await promise;
+
+      console.log(
+        "P3 update result:",
+        result
+      );
+
+      console.assert(
+        result.status === "BLOCKED",
+        "P3 hard veto must win after approval"
+      );
+
+      console.assert(
+        result.reason.includes(
+          "P3 flagged target as sensitive"
+        ),
+        "Expected P3 sensitive-element reason"
+      );
+    }
+
+
+    async function testRejection() {
+
+      console.log(
+        "TEST 4: user rejection"
+      );
+
+      _resetForTesting();
+
+      const sentMessages = [];
+
+      const action = {
+        action: "click",
+        target_id: "el_delete",
+        confidence: 0.95,
+        metadata: {}
+      };
+
+      const promise =
+        processAction(
+          action,
+          {
+            sendMessage: (message) => {
+              sentMessages.push(message);
+            }
+          }
+        );
+
+      const request =
+        sentMessages[0];
+
+      handleConfirmationResponse({
+        type: "P6_CONFIRMATION_RESPONSE",
+        requestId:
+          request.requestId,
+        approved: false
+      });
+
+      const result =
+        await promise;
+
+      console.log(
+        "Rejection result:",
+        result
+      );
+
+      console.assert(
+        result.status ===
+          "CONFIRMATION_REJECTED",
+        "Rejected action must not execute"
+      );
+    }
+
+
+    async function runTests() {
+
+      await testApproval();
+
+      await testDomReplacement();
+
+      await testP3Update();
+
+      await testRejection();
+
+      console.assert(
+        _pendingCountForTesting() === 0,
+        "All confirmations should be cleared"
+      );
+
+      console.log(
+        "===================================="
+      );
+
+      console.log(
+        "P6 Confirmation Integration tests completed."
+      );
+
+      console.log(
+        "===================================="
+      );
+    }
+
+
+    runTests().catch((error) => {
+      console.error(
+        "Confirmation integration test failed:",
+        error
+      );
+    });
+
+  </script>
+
+</body>
+</html>

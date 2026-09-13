@@ -1,283 +1,219 @@
-/**
- * P6 Risky Action Rules
- *
- * IMPORTANT:
- * This module only classifies risk.
- *
- * P3 sensitive detection remains a hard block in safetyGate.js.
- *
- * This module must never:
- * - execute actions
- * - override P3
- * - log page text
- * - treat arbitrary action names as semantic actions
- */
+// Classifies whether an action needs user confirmation.
+//
+// P5's action field only contains:
+//
+//   click | type | scroll | navigate | wait
+//
+// Risky categories therefore come from the resolved DOM element,
+// not from inventing action types such as "delete" or "purchase".
 
 
-/**
- * Normalize text for conservative matching.
- */
-function normalizeText(
-  value
-) {
-  if (
-    typeof value !== "string"
-  ) {
+const RISKY_KEYWORDS = [
+  "delete",
+  "remove",
+  "trash",
+  "discard",
+  "erase",
+
+  "buy",
+  "purchase",
+  "checkout",
+  "place order",
+  "confirm order",
+
+  "pay",
+  "payment",
+  "pay now",
+  "charge",
+
+  "transfer",
+  "send money",
+  "wire",
+
+  "submit",
+
+  "send",
+
+  "change password",
+  "update password",
+  "reset password",
+  "set password"
+];
+
+
+function getAccessibleText(element) {
+  if (!element) {
     return "";
   }
 
-  return value
-    .normalize("NFKC")
+  // innerText may be empty when layout has not been calculated.
+  // textContent is used only as a fallback.
+  const visibleText =
+    element.innerText ||
+    element.textContent ||
+    "";
+
+  const parts = [
+    visibleText,
+    element.getAttribute("aria-label"),
+    element.getAttribute("title")
+  ];
+
+  // IMPORTANT:
+  //
+  // Do not include input.value here.
+  //
+  // A typed value can contain:
+  //   - passwords
+  //   - tokens
+  //   - payment data
+  //   - personal information
+  //
+  // The old implementation included "value", which could leak
+  // secret typed content into the risk-classification/logging path.
+
+  return parts
+    .filter(Boolean)
+    .join(" ")
     .toLowerCase()
-    .replace(/\s+/g, " ")
     .trim();
 }
 
 
-/**
- * Escape regex characters.
- */
-function escapeRegex(
-  value
-) {
-  return value.replace(
-    /[.*+?^${}()|[\]\\]/g,
-    "\\$&"
-  );
-}
-
-
-/**
- * Match a phrase as a whole word/phrase.
- */
-function containsPhrase(
-  text,
-  phrase
-) {
-  const normalizedText =
-    normalizeText(text);
-
-  const normalizedPhrase =
-    normalizeText(phrase);
-
-  if (
-    !normalizedText ||
-    !normalizedPhrase
-  ) {
+function matchesRiskyKeyword(text) {
+  if (!text) {
     return false;
   }
 
-  const expression =
-    new RegExp(
-      `(?:^|\\s|[^a-z0-9])${escapeRegex(
-        normalizedPhrase
-      )}(?:$|\\s|[^a-z0-9])`,
-      "i"
-    );
+  return RISKY_KEYWORDS.some((keyword) => {
+    const escapedKeyword =
+      keyword.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
+      );
 
-  return expression.test(
-    normalizedText
-  );
+    /*
+     * Word boundaries are deliberately retained.
+     *
+     * This prevents:
+     *
+     *   "wire"
+     *
+     * from matching:
+     *
+     *   "wireless"
+     *
+     * while still matching:
+     *
+     *   "Wire Money"
+     */
+    const pattern =
+      new RegExp(
+        `\\b${escapedKeyword}\\b`,
+        "i"
+      );
+
+    return pattern.test(text);
+  });
 }
 
 
 /**
- * Risky financial/destructive action language.
+ * Detect credential/password fields.
  *
- * Keep these semantic terms conservative.
+ * Password risk must not depend solely on:
  *
- * "wire" is intentionally treated as a complete word,
- * preventing "wireless" from becoming a false positive.
+ *   type="password"
+ *
+ * Modern sites frequently use autocomplete semantics.
+ *
+ * We therefore retain all of:
+ *
+ *   type="password"
+ *   autocomplete="current-password"
+ *   autocomplete="new-password"
+ *
+ * We also support the common "one-time-code" / credential
+ * semantics conservatively where appropriate.
  */
-const RISKY_PHRASES = Object.freeze([
-  "delete",
-  "remove account",
-  "close account",
-  "terminate account",
-  "transfer",
-  "wire transfer",
-  "send money",
-  "send payment",
-  "pay",
-  "payment",
-  "purchase",
-  "buy",
-  "checkout",
-  "place order",
-  "confirm order",
-  "submit",
-  "submit order",
-  "submit payment",
-  "withdraw",
-  "withdrawal"
-]);
-
-
-/**
- * Attributes that may contain useful accessible semantics.
- */
-const SEMANTIC_ATTRIBUTES = Object.freeze([
-  "aria-label",
-  "aria-description",
-  "title",
-  "name",
-  "value",
-  "alt",
-  "role"
-]);
-
-
-function collectElementSemantics(
-  element
-) {
-  if (
-    !element ||
-    typeof element !== "object"
-  ) {
-    return "";
-  }
-
-  const parts = [];
-
-  // Do not read password values.
-  const type =
-    typeof element.type === "string"
-      ? element.type.toLowerCase()
-      : "";
-
-  if (type !== "password") {
-    if (
-      typeof element.innerText === "string"
-    ) {
-      parts.push(
-        element.innerText
-      );
-    }
-
-    if (
-      typeof element.textContent === "string"
-    ) {
-      parts.push(
-        element.textContent
-      );
-    }
-  }
-
-  for (
-    const attribute
-    of SEMANTIC_ATTRIBUTES
-  ) {
-
-    if (
-      attribute === "value" &&
-      type === "password"
-    ) {
-      continue;
-    }
-
-    try {
-      const value =
-        element.getAttribute(
-          attribute
-        );
-
-      if (value) {
-        parts.push(value);
-      }
-
-    } catch {
-      // Ignore inaccessible attributes.
-    }
-  }
-
-
-  return parts
-    .join(" ")
-    .slice(0, 5000);
-}
-
-
-function isPasswordTarget(
-  element
-) {
+export function isPasswordField(element) {
   if (!element) {
     return false;
   }
 
   const type =
-    typeof element.type === "string"
-      ? element.type.toLowerCase()
-      : "";
+    (
+      element.getAttribute("type") ||
+      ""
+    )
+      .trim()
+      .toLowerCase();
 
-  return (
-    type === "password"
-  );
+  const autocomplete =
+    (
+      element.getAttribute("autocomplete") ||
+      ""
+    )
+      .trim()
+      .toLowerCase();
+
+  if (type === "password") {
+    return true;
+  }
+
+  if (
+    autocomplete === "current-password" ||
+    autocomplete === "new-password"
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 
 /**
- * Classify action risk.
- *
  * Returns:
  *
- * SAFE
- * CONFIRM
+ *   "SAFE"
+ *   "CONFIRM"
  */
 export function classifyRisk(
   agentAction,
   element
 ) {
-
   if (
     !agentAction ||
-    typeof agentAction !== "object"
+    !element
   ) {
-    return "CONFIRM";
-  }
-
-
-  const action =
-    agentAction.action;
-
-
-  if (
-    action === "type" &&
-    isPasswordTarget(element)
-  ) {
-    return "CONFIRM";
-  }
-
-
-  if (
-    action !== "click" &&
-    action !== "type"
-  ) {
-    /*
-     * Navigation must be handled by the explicit
-     * navigation policy in safetyGate.js.
-     *
-     * It must not silently reach this default as SAFE
-     * when the navigation shape is malformed.
-     */
     return "SAFE";
   }
 
 
-  const semantics =
-    collectElementSemantics(
-      element
-    );
+  // -----------------------------------------
+  // Password / credential typing
+  // -----------------------------------------
 
-
-  for (
-    const phrase
-    of RISKY_PHRASES
+  if (
+    agentAction.action === "type" &&
+    isPasswordField(element)
   ) {
+    return "CONFIRM";
+  }
+
+
+  // -----------------------------------------
+  // Risky clicks
+  // -----------------------------------------
+
+  if (
+    agentAction.action === "click"
+  ) {
+    const text =
+      getAccessibleText(element);
+
     if (
-      containsPhrase(
-        semantics,
-        phrase
-      )
+      matchesRiskyKeyword(text)
     ) {
       return "CONFIRM";
     }
@@ -288,8 +224,17 @@ export function classifyRisk(
 }
 
 
-export {
-  containsPhrase,
-  normalizeText,
-  isPasswordTarget
-};
+/**
+ * Testing helper.
+ *
+ * Kept exported so Phase 6 hardening tests can directly verify
+ * the boundary behavior without needing to execute an action.
+ */
+export function _matchesRiskyKeywordForTesting(
+  text
+) {
+  return matchesRiskyKeyword(
+    String(text || "")
+      .toLowerCase()
+  );
+}

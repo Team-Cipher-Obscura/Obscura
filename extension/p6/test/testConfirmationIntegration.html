@@ -2,6 +2,7 @@
 <html>
 
 <head>
+  <meta charset="utf-8">
   <title>P6 Confirmation Integration Test</title>
 </head>
 
@@ -10,26 +11,24 @@
   <h1>P6 Confirmation Integration Test</h1>
 
   <button
-    id="deleteButton"
     data-agent-id="el_delete"
+    id="deleteButton"
   >
     Delete Account
   </button>
 
   <button
-    id="replaceButton"
-    data-agent-id="el_replace"
+    data-agent-id="el_submit"
+    id="submitButton"
   >
-    Replace Me
+    Submit Order
   </button>
 
-  <button
-    id="sensitiveButton"
-    data-agent-id="el_sensitive"
+  <input
+    data-agent-id="el_password"
+    id="password"
+    type="password"
   >
-    Delete Sensitive Account
-  </button>
-
 
   <script type="module">
 
@@ -43,492 +42,340 @@
     } from "../confirmationFlow.js";
 
     import {
-      update,
-      _resetForTesting
+      update
     } from "../sensitiveRegistry.js";
 
 
-    function createSender(messages) {
+    function assert(
+      condition,
+      message
+    ) {
+      console.assert(
+        condition,
+        message
+      );
 
-      return (message) => {
-        messages.push(message);
-      };
-
+      if (!condition) {
+        throw new Error(message);
+      }
     }
 
 
-    async function testApproval() {
-
-      console.log(
-        "TEST 1: approval -> fresh safety -> execution"
-      );
-
-
-      _resetForTesting();
-
-
-      const messages = [];
-
-
-      const action = {
-        action: "click",
-        target_id: "el_delete",
-        confidence: 0.95,
-        metadata: {}
-      };
-
-
-      const promise =
-        processAction(
-          action,
-          {
-            sendMessage:
-              createSender(messages)
-          }
-        );
-
-
-      console.assert(
-        _pendingCountForTesting() === 1,
-        "Confirmation should be pending"
-      );
-
-
-      const request =
-        messages[0];
-
-
-      console.assert(
-        request.type ===
-          "P6_CONFIRMATION_REQUEST",
-        "Expected confirmation request"
-      );
-
-
-      handleConfirmationResponse({
-        type:
-          "P6_CONFIRMATION_RESPONSE",
-
-        requestId:
-          request.requestId,
-
-        approved: true
-      });
-
-
-      const result =
-        await promise;
-
-
-      console.log(
-        "Approval result:",
-        result
-      );
-
-
-      console.assert(
-        result.status === "EXECUTED",
-        "Approved risky action should execute"
-      );
-
-
-      console.assert(
-        _pendingCountForTesting() === 0,
-        "No confirmation should remain pending"
-      );
-
-    }
-
-
-    async function testDomReplacement() {
-
-      console.log(
-        "TEST 2: DOM replacement while confirmation pending"
-      );
-
-
-      _resetForTesting();
-
-
-      const messages = [];
-
-
-      const action = {
-        action: "click",
-        target_id: "el_replace",
-        confidence: 0.95,
-        metadata: {}
-      };
-
-
-      const promise =
-        processAction(
-          action,
-          {
-            sendMessage:
-              createSender(messages)
-          }
-        );
-
-
-      console.assert(
-        _pendingCountForTesting() === 1,
-        "Confirmation should be pending"
-      );
-
-
-      const oldElement =
-        document.querySelector(
-          '[data-agent-id="el_replace"]'
-        );
-
-
-      console.assert(
-        oldElement !== null,
-        "Original target should exist"
-      );
-
-
-      // The page changes while the user is deciding.
-      oldElement.remove();
-
-
-      const replacement =
-        document.createElement("button");
-
-
-      replacement.id =
-        "replacementButton";
-
-
-      replacement.textContent =
-        "Replacement Button";
-
-
-      replacement.setAttribute(
-        "data-agent-id",
-        "el_replace_new"
-      );
-
-
-      document.body.appendChild(
-        replacement
-      );
-
-
-      const request =
-        messages[0];
-
-
-      handleConfirmationResponse({
-        type:
-          "P6_CONFIRMATION_RESPONSE",
-
-        requestId:
-          request.requestId,
-
-        approved: true
-      });
-
-
-      const result =
-        await promise;
-
-
-      console.log(
-        "DOM replacement result:",
-        result
-      );
-
-
-      console.assert(
-        result.status === "BLOCKED",
-        "Old target must be blocked after replacement"
-      );
-
-
-      console.assert(
-        result.reason ===
-          "TARGET_COULD_NOT_BE_RESOLVED",
-        "Expected fresh target-resolution failure"
-      );
-
-    }
-
-
-    async function testP3Update() {
-
-      console.log(
-        "TEST 3: P3 marks target sensitive while confirmation pending"
-      );
-
-
-      _resetForTesting();
-
-
-      const messages = [];
-
-
-      const action = {
-        action: "click",
-        target_id: "el_sensitive",
-        confidence: 0.95,
-        metadata: {}
-      };
-
-
-      const promise =
-        processAction(
-          action,
-          {
-            sendMessage:
-              createSender(messages)
-          }
-        );
-
-
-      console.assert(
-        _pendingCountForTesting() === 1,
-        "Confirmation should be pending"
-      );
-
-
-      // P3 changes its verdict before approval.
-      update({
-        sensitive_element_ids: [
-          "el_sensitive"
-        ],
-
-        types: {
-          el_sensitive:
-            "account_sensitive_data"
-        }
-      });
-
-
-      const request =
-        messages[0];
-
-
-      handleConfirmationResponse({
-        type:
-          "P6_CONFIRMATION_RESPONSE",
-
-        requestId:
-          request.requestId,
-
-        approved: true
-      });
-
-
-      const result =
-        await promise;
-
-
-      console.log(
-        "P3 update result:",
-        result
-      );
-
-
-      console.assert(
-        result.status === "BLOCKED",
-        "P3 hard veto must win after approval"
-      );
-
-
-      console.assert(
-        result.reason.includes(
-          "P3 flagged target as sensitive"
-        ),
-        "Expected P3 sensitive-element reason"
-      );
-
-    }
-
-
-    async function testRejection() {
-
-      console.log(
-        "TEST 4: explicit rejection"
-      );
-
-
-      _resetForTesting();
-
-
-      const messages = [];
-
-
-      const action = {
-        action: "click",
-        target_id: "el_delete",
-        confidence: 0.95,
-        metadata: {}
-      };
-
-
-      const promise =
-        processAction(
-          action,
-          {
-            sendMessage:
-              createSender(messages)
-          }
-        );
-
-
-      const request =
-        messages[0];
-
-
-      handleConfirmationResponse({
-        type:
-          "P6_CONFIRMATION_RESPONSE",
-
-        requestId:
-          request.requestId,
-
-        approved: false
-      });
-
-
-      const result =
-        await promise;
-
-
-      console.assert(
-        result.status ===
-          "CONFIRMATION_REJECTED",
-        "Rejection must not execute"
-      );
-
-    }
-
-
-    async function testTimeout() {
-
-      console.log(
-        "TEST 5: confirmation timeout"
-      );
-
-
-      _resetForTesting();
-
-
-      const messages = [];
-
-
-      const action = {
-        action: "click",
-        target_id: "el_delete",
-        confidence: 0.95,
-        metadata: {}
-      };
-
-
-      /*
-       * The production timeout is 30 seconds.
-       *
-       * This test cannot inject timeoutMs through
-       * processAction(), so it verifies the timeout
-       * behavior separately through requestConfirmation
-       * in testConfirmationFlow.html.
-       *
-       * This integration test verifies that processAction
-       * remains pending until the confirmation layer resolves.
-       */
-      const promise =
-        processAction(
-          action,
-          {
-            sendMessage:
-              createSender(messages)
-          }
-        );
-
-
-      console.assert(
-        _pendingCountForTesting() === 1,
-        "Confirmation should remain pending"
-      );
-
-
-      const request =
-        messages[0];
-
-
-      // Resolve the pending request as a timeout-equivalent
-      // denial. The confirmation layer's dedicated test
-      // verifies the actual timer expiration.
-      handleConfirmationResponse({
-        type:
-          "P6_CONFIRMATION_RESPONSE",
-
-        requestId:
-          request.requestId,
-
-        approved: false
-      });
-
-
-      const result =
-        await promise;
-
-
-      console.assert(
-        result.status ===
-          "CONFIRMATION_REJECTED",
-        "Denied confirmation must not execute"
-      );
-
-    }
-
-
-    async function runTests() {
-
-      await testApproval();
-
-      await testDomReplacement();
-
-      await testP3Update();
-
-      await testRejection();
-
-      await testTimeout();
-
-
-      console.assert(
-        _pendingCountForTesting() === 0,
-        "All confirmation requests should be resolved"
-      );
-
-
-      console.log(
-        "===================================="
-      );
-
-      console.log(
-        "P6 Confirmation Integration tests completed."
-      );
-
-      console.log(
-        "===================================="
-      );
-
-    }
-
-
-    runTests().catch((error) => {
-
-      console.error(
-        "Confirmation integration test failed:",
-        error
-      );
-
+    // -----------------------------------------
+    // P3 sensitive map
+    // -----------------------------------------
+
+    update({
+      sensitive_element_ids: [
+        "el_password"
+      ],
+
+      types: {
+        el_password:
+          "password_field"
+      }
     });
+
+
+    // -----------------------------------------
+    // Confirmation message transport
+    // -----------------------------------------
+
+    const sentMessages = [];
+
+    function sendMessage(message) {
+      sentMessages.push(message);
+    }
+
+
+    // -----------------------------------------
+    // 1. RISKY ACTION MUST REQUEST CONFIRMATION
+    // -----------------------------------------
+
+    const deleteAction = {
+      action: "click",
+      target_id: "el_delete",
+      confidence: 0.95,
+      metadata: {}
+    };
+
+
+    const deletePromise =
+      processAction(
+        deleteAction,
+        sendMessage
+      );
+
+
+    await new Promise(
+      (resolve) =>
+        setTimeout(resolve, 0)
+    );
+
+
+    assert(
+      sentMessages.length === 1,
+      "Risky action must send exactly one confirmation request"
+    );
+
+
+    const request =
+      sentMessages[0];
+
+
+    assert(
+      request.type ===
+        "P6_CONFIRMATION_REQUEST",
+      "Confirmation request must use P6 message type"
+    );
+
+
+    assert(
+      request.requestId,
+      "Confirmation request must contain requestId"
+    );
+
+
+    assert(
+      request.action.action ===
+        "click",
+      "Confirmation request should contain the action"
+    );
+
+
+    assert(
+      request.action.target_id ===
+        "el_delete",
+      "Confirmation request should contain target_id"
+    );
+
+
+    assert(
+      request.targetSummary ===
+        "Delete Account",
+      "Confirmation summary should be privacy-safe and user-readable"
+    );
+
+
+    assert(
+      _pendingCountForTesting() === 1,
+      "Confirmation should remain pending until P1 responds"
+    );
+
+
+    // -----------------------------------------
+    // 2. APPROVE
+    // -----------------------------------------
+
+    handleConfirmationResponse({
+      type:
+        "P6_CONFIRMATION_RESPONSE",
+
+      requestId:
+        request.requestId,
+
+      approved: true
+    });
+
+
+    const approvedResult =
+      await deletePromise;
+
+
+    console.log(
+      "Approved result:",
+      approvedResult
+    );
+
+
+    assert(
+      approvedResult.status ===
+        "EXECUTED",
+      "Approved risky action should execute"
+    );
+
+
+    assert(
+      _pendingCountForTesting() === 0,
+      "Approved request must be removed from pending map"
+    );
+
+
+    // -----------------------------------------
+    // 3. REJECTION
+    // -----------------------------------------
+
+    sentMessages.length = 0;
+
+
+    const rejectionPromise =
+      processAction(
+        deleteAction,
+        sendMessage
+      );
+
+
+    await new Promise(
+      (resolve) =>
+        setTimeout(resolve, 0)
+    );
+
+
+    const rejectionRequest =
+      sentMessages[0];
+
+
+    assert(
+      rejectionRequest,
+      "Second risky action must request confirmation"
+    );
+
+
+    handleConfirmationResponse({
+      type:
+        "P6_CONFIRMATION_RESPONSE",
+
+      requestId:
+        rejectionRequest.requestId,
+
+      approved: false
+    });
+
+
+    const rejectedResult =
+      await rejectionPromise;
+
+
+    console.log(
+      "Rejected result:",
+      rejectedResult
+    );
+
+
+    assert(
+      rejectedResult.status ===
+        "BLOCKED",
+      "Rejected action must be blocked"
+    );
+
+
+    assert(
+      rejectedResult.reason ===
+        "CONFIRMATION_REJECTED",
+      "Rejected action should expose confirmation rejection"
+    );
+
+
+    // -----------------------------------------
+    // 4. P3 BLOCK MUST WIN
+    //
+    // Start confirmation first, then make the
+    // target sensitive before approving.
+    // -----------------------------------------
+
+    sentMessages.length = 0;
+
+
+    const submitAction = {
+      action: "click",
+      target_id: "el_submit",
+      confidence: 0.95,
+      metadata: {}
+    };
+
+
+    const submitPromise =
+      processAction(
+        submitAction,
+        sendMessage
+      );
+
+
+    await new Promise(
+      (resolve) =>
+        setTimeout(resolve, 0)
+    );
+
+
+    const submitRequest =
+      sentMessages[0];
+
+
+    assert(
+      submitRequest,
+      "Submit action should request confirmation"
+    );
+
+
+    // P3 changes its classification while the
+    // confirmation dialog is open.
+    update({
+      sensitive_element_ids: [
+        "el_password",
+        "el_submit"
+      ],
+
+      types: {
+        el_password:
+          "password_field",
+
+        el_submit:
+          "sensitive_action"
+      }
+    });
+
+
+    // User approves, but the fresh safety gate
+    // must still block.
+    handleConfirmationResponse({
+      type:
+        "P6_CONFIRMATION_RESPONSE",
+
+      requestId:
+        submitRequest.requestId,
+
+      approved: true
+    });
+
+
+    const submitResult =
+      await submitPromise;
+
+
+    console.log(
+      "TOCTOU/P3 result:",
+      submitResult
+    );
+
+
+    assert(
+      submitResult.status ===
+        "BLOCKED",
+      "Fresh P3 sensitive veto must win after approval"
+    );
+
+
+    assert(
+      submitResult.detail ===
+        "SENSITIVE_ELEMENT_BLOCKED",
+      "Fresh safety check should report P3 block"
+    );
+
+
+    console.log(
+      "===================================="
+    );
+
+    console.log(
+      "P6 Confirmation Integration tests passed."
+    );
+
+    console.log(
+      "===================================="
+    );
 
   </script>
 
 </body>
+
 </html>

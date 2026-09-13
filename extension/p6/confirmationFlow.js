@@ -3,49 +3,181 @@ import {
   P6_CONFIRMATION_RESPONSE
 } from "./messageTypes.js";
 
+const CONFIRMATION_TIMEOUT_MS = 30000;
 
-const CONFIRMATION_TIMEOUT_MS =
-  30000;
+const pendingRequests = new Map();
 
-
-const pendingRequests =
-  new Map();
+let runtimeListenerRegistered = false;
 
 
 /**
- * Request confirmation from P1.
+ * Returns the default browser message sender.
  *
- * Production behavior:
- * - sends P6_CONFIRMATION_REQUEST
- * - waits for P6_CONFIRMATION_RESPONSE
- * - 30 seconds with no response => deny
- *
- * timeoutMs is intentionally injectable for tests.
- * Production callers use the default 30-second timeout.
+ * Tests should inject their own sendMessage function.
  */
-export function requestConfirmation({
-  sendMessage,
-  action,
-  targetSummary,
-  timeoutMs = CONFIRMATION_TIMEOUT_MS
-}) {
-
-  if (typeof sendMessage !== "function") {
-    return Promise.resolve(false);
+function getDefaultSendMessage() {
+  if (
+    typeof chrome !== "undefined" &&
+    chrome.runtime &&
+    typeof chrome.runtime.sendMessage === "function"
+  ) {
+    return (message) => chrome.runtime.sendMessage(message);
   }
 
+  throw new Error(
+    "No confirmation message sender is available."
+  );
+}
+
+
+/**
+ * Extract a short, privacy-safe description of a DOM target.
+ *
+ * Never includes:
+ *   - input values
+ *   - page text in large quantities
+ *   - password contents
+ *   - arbitrary DOM HTML
+ */
+function buildTargetSummary(element) {
+  if (!element) {
+    return "This action changes the browser state.";
+  }
+
+  const tagName =
+    (element.tagName || "element")
+      .toLowerCase();
+
+  const ariaLabel =
+    element.getAttribute("aria-label");
+
+  const title =
+    element.getAttribute("title");
+
+  const name =
+    element.getAttribute("name");
+
+  const id =
+    element.getAttribute("id");
+
+  const autocomplete =
+    (
+      element.getAttribute("autocomplete") ||
+      ""
+    ).toLowerCase();
+
+  // Never expose values from password or credential fields.
+  const isCredentialField =
+    autocomplete === "current-password" ||
+    autocomplete === "new-password" ||
+    (
+      (element.getAttribute("type") || "")
+        .toLowerCase() === "password"
+    );
+
+  if (isCredentialField) {
+    return `Password field (${tagName})`;
+  }
+
+  const label =
+    ariaLabel ||
+    title ||
+    name ||
+    id;
+
+  if (label) {
+    return String(label)
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 120);
+  }
+
+  return `Target element (${tagName})`;
+}
+
+
+/**
+ * Build the payload used by the confirmation UI.
+ *
+ * This deliberately does NOT forward arbitrary action.metadata.
+ *
+ * In particular, model-produced values may contain:
+ *   - passwords
+ *   - typed text
+ *   - tokens
+ *   - payment information
+ *   - other sensitive page data
+ */
+export function buildConfirmationPayload(
+  action,
+  element
+) {
+  if (!action || typeof action !== "object") {
+    throw new TypeError(
+      "Cannot build confirmation payload from invalid action."
+    );
+  }
+
+  return {
+    action: {
+      action: action.action || null,
+      target_id: action.target_id || null,
+      confidence:
+        typeof action.confidence === "number"
+          ? action.confidence
+          : null
+    },
+
+    targetSummary:
+      buildTargetSummary(element)
+  };
+}
+
+
+/**
+ * Request user confirmation.
+ *
+ * IMPORTANT:
+ * This preserves the Phase 4 API:
+ *
+ * requestConfirmation({
+ *   sendMessage,
+ *   action,
+ *   targetSummary
+ * })
+ *
+ * The promise resolves to:
+ *
+ *   true  -> approved
+ *   false -> rejected or timed out
+ */
+export function requestConfirmation({
+  sendMessage = getDefaultSendMessage(),
+  action,
+  targetSummary
+}) {
+  if (typeof sendMessage !== "function") {
+    return Promise.reject(
+      new TypeError(
+        "sendMessage must be a function."
+      )
+    );
+  }
 
   const requestId =
-    crypto.randomUUID();
-
+    (
+      typeof crypto !== "undefined" &&
+      typeof crypto.randomUUID === "function"
+    )
+      ? crypto.randomUUID()
+      : `p6-confirm-${Date.now()}-${Math.random()
+          .toString(16)
+          .slice(2)}`;
 
   return new Promise((resolve) => {
-
     let settled = false;
 
-
-    const finish = (approved) => {
-
+    const settle = (approved) => {
       if (settled) {
         return;
       }
@@ -53,62 +185,63 @@ export function requestConfirmation({
       settled = true;
 
       clearTimeout(timeoutId);
+      pendingRequests.delete(requestId);
 
-      pendingRequests.delete(
-        requestId
-      );
-
-      resolve(
-        Boolean(approved)
-      );
+      resolve(Boolean(approved));
     };
-
 
     const timeoutId =
       setTimeout(() => {
-
-        finish(false);
-
-      }, timeoutMs);
-
+        settle(false);
+      }, CONFIRMATION_TIMEOUT_MS);
 
     pendingRequests.set(
       requestId,
       {
-        resolve: finish
+        resolve: settle
       }
     );
 
+    const message = {
+      type: P6_CONFIRMATION_REQUEST,
+      requestId,
+      action,
+      targetSummary
+    };
 
     try {
+      const sendResult =
+        sendMessage(message);
 
-      sendMessage({
-        type:
-          P6_CONFIRMATION_REQUEST,
-
-        requestId,
-
-        action,
-
-        targetSummary
-      });
-
+      // Chrome's sendMessage can return a Promise.
+      // We intentionally do not interpret its result as approval.
+      //
+      // User approval only comes from
+      // P6_CONFIRMATION_RESPONSE.
+      if (
+        sendResult &&
+        typeof sendResult.catch === "function"
+      ) {
+        sendResult.catch(() => {
+          // A failed message delivery cannot approve an action.
+          settle(false);
+        });
+      }
     } catch {
-
-      finish(false);
+      // If the confirmation request cannot be delivered,
+      // fail closed.
+      settle(false);
     }
-
   });
 }
 
 
 /**
- * Handle a P1 -> P6 confirmation response.
+ * Handle P1 -> P6 confirmation responses.
  */
 export function handleConfirmationResponse(
   message
 ) {
-
   if (
     message?.type !==
     P6_CONFIRMATION_RESPONSE
@@ -116,26 +249,19 @@ export function handleConfirmationResponse(
     return;
   }
 
-
   const requestId =
     message.requestId;
-
 
   if (!requestId) {
     return;
   }
 
-
   const pending =
-    pendingRequests.get(
-      requestId
-    );
-
+    pendingRequests.get(requestId);
 
   if (!pending) {
     return;
   }
-
 
   pending.resolve(
     Boolean(message.approved)
@@ -144,40 +270,39 @@ export function handleConfirmationResponse(
 
 
 /**
- * Real extension message bridge.
+ * Register the browser runtime listener.
  *
- * P1 sends P6_CONFIRMATION_RESPONSE through
- * chrome.runtime.sendMessage().
+ * Safe to call more than once.
  *
- * The P6 module receives it here and routes it
- * into the pending confirmation promise.
- *
- * The listener is guarded so the same module can
- * continue to run inside standalone browser tests
- * where chrome.runtime does not exist.
+ * Tests can simply call this after installing a mocked
+ * chrome.runtime.onMessage implementation.
  */
-if (
-  typeof chrome !== "undefined" &&
-  chrome.runtime &&
-  chrome.runtime.onMessage &&
-  typeof chrome.runtime.onMessage.addListener ===
-    "function"
-) {
+export function registerConfirmationMessageListener() {
+  if (runtimeListenerRegistered) {
+    return;
+  }
+
+  if (
+    typeof chrome === "undefined" ||
+    !chrome.runtime ||
+    !chrome.runtime.onMessage ||
+    typeof chrome.runtime.onMessage.addListener !== "function"
+  ) {
+    return;
+  }
 
   chrome.runtime.onMessage.addListener(
     (message) => {
-
-      handleConfirmationResponse(
-        message
-      );
-
+      handleConfirmationResponse(message);
     }
   );
+
+  runtimeListenerRegistered = true;
 }
 
 
 /**
- * Used by tests only.
+ * Testing helper.
  */
 export function _pendingCountForTesting() {
   return pendingRequests.size;
@@ -185,11 +310,11 @@ export function _pendingCountForTesting() {
 
 
 /**
- * Used by tests only.
+ * Testing helper.
  *
- * Keeps the production timeout private while allowing
- * integration tests to exercise timeout behavior without
- * waiting 30 seconds.
+ * Allows tests to reset the listener-registration state
+ * without exposing the pending request map itself.
  */
-export const _CONFIRMATION_TIMEOUT_MS_FOR_TESTING =
-  CONFIRMATION_TIMEOUT_MS;
+export function _resetConfirmationListenerForTesting() {
+  runtimeListenerRegistered = false;
+}

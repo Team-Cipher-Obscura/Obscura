@@ -158,6 +158,8 @@ function extractElementInfo(element) {
 
     text: getElementText(element),
 
+    autocomplete: element.autocomplete || "",
+
     bbox: bbox,
 
     confidence: 1.0

@@ -17,6 +17,11 @@
 //
 // P2 does NOT modify cycle_id.
 
+// P3 is wired in below: once P2 finishes fusion, its perception
+// payload is handed to P3's processFrame(), and P3's { toP1, toP4,
+// toP6 } payloads are what actually get sent back to background.js.
+
+import { processFrame } from "./src/index.js";
 
 // --------------------------------------------------
 // Convert P1's PNG data URL into an Image
@@ -271,11 +276,40 @@ chrome.runtime.onMessage.addListener(
 
     createPerceptionPayload(p1Payload)
 
-      .then((perceptionPayload) => {
+      .then(async (perceptionPayload) => {
 
         console.log(
           "[P2] Complete perception payload:",
           perceptionPayload
+        );
+
+
+        // P2 → P3
+        // P3's processFrame() expects `frame_id`, not `cycle_id` —
+        // mapped explicitly here. The screenshot comes from P1's
+        // original payload since P2 never modifies it.
+
+        const p3Result =
+          await processFrame({
+
+            frame_id:
+              perceptionPayload.cycle_id,
+
+            timestamp:
+              perceptionPayload.dom_extracted_at,
+
+            elements:
+              perceptionPayload.elements,
+
+            screenshot:
+              p1Payload.screenshot
+
+          });
+
+
+        console.log(
+          "[P3] Processed frame:",
+          p3Result
         );
 
 
@@ -284,7 +318,16 @@ chrome.runtime.onMessage.addListener(
           valid: true,
 
           payload:
-            perceptionPayload
+            perceptionPayload,
+
+          toP1:
+            p3Result.toP1,
+
+          toP4:
+            p3Result.toP4,
+
+          toP6:
+            p3Result.toP6
 
         });
 
@@ -293,7 +336,7 @@ chrome.runtime.onMessage.addListener(
       .catch((error) => {
 
         console.error(
-          "[P2] Perception failed:",
+          "[P2/P3] Perception/processing failed:",
           error
         );
 
@@ -304,7 +347,7 @@ chrome.runtime.onMessage.addListener(
 
           error:
             error?.message ||
-            "P2 perception failed."
+            "P2/P3 perception failed."
 
         });
 

@@ -24,7 +24,7 @@
         "p2/dom/extractElements.js",
         "dist/p2-vision.js",
         "p2/fusion/domVisionFusion.js",
-        "content.js"
+        "content.bundle.js"
       ]
     }
   ],
@@ -33,7 +33,9 @@
     {
       "resources": [
         "p2/vision/ort/*",
-        "p2/vision/yolo26n.onnx"
+        "p2/vision/yolo26n.onnx",
+        "models/blazeface/*",
+        "models/tessdata/*"
       ],
       "matches": ["<all_urls>"]
     }

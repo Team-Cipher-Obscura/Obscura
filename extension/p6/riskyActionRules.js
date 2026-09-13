@@ -1,129 +1,295 @@
-// Classifies whether an action needs user confirmation.
-//
-// P5's action field only contains:
-// click | type | scroll | navigate | wait
-//
-// Therefore risky categories are detected from the resolved
-// DOM element's text and attributes.
-
-const RISKY_KEYWORDS = [
-  "delete",
-  "remove",
-  "trash",
-  "discard",
-  "erase",
-
-  "buy",
-  "purchase",
-  "checkout",
-  "place order",
-  "confirm order",
-
-  "pay",
-  "payment",
-  "pay now",
-  "charge",
-
-  "transfer",
-  "send money",
-  "wire",
-
-  "submit",
-
-  "send",
-
-  "change password",
-  "update password",
-  "reset password",
-  "set password"
-];
+/**
+ * P6 Risky Action Rules
+ *
+ * IMPORTANT:
+ * This module only classifies risk.
+ *
+ * P3 sensitive detection remains a hard block in safetyGate.js.
+ *
+ * This module must never:
+ * - execute actions
+ * - override P3
+ * - log page text
+ * - treat arbitrary action names as semantic actions
+ */
 
 
-function getAccessibleText(element) {
+/**
+ * Normalize text for conservative matching.
+ */
+function normalizeText(
+  value
+) {
+  if (
+    typeof value !== "string"
+  ) {
+    return "";
+  }
 
-  // innerText can be empty when layout has not been calculated.
-  // textContent does not depend on layout, so use it as fallback.
-  const visibleText =
-    element.innerText ||
-    element.textContent ||
-    "";
-
-  const parts = [
-    visibleText,
-    element.getAttribute("aria-label"),
-    element.getAttribute("value"),
-    element.getAttribute("title")
-  ];
-
-  return parts
-    .filter(Boolean)
-    .join(" ")
+  return value
+    .normalize("NFKC")
     .toLowerCase()
+    .replace(/\s+/g, " ")
     .trim();
 }
 
-function matchesRiskyKeyword(text) {
 
-  return RISKY_KEYWORDS.some((keyword) => {
-
-    const escapedKeyword =
-      keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-    const pattern =
-      new RegExp(`\\b${escapedKeyword}\\b`, "i");
-
-    return pattern.test(text);
-  });
-}
-
-
-function isPasswordField(element) {
-
-  const type =
-    (element.getAttribute("type") || "")
-      .toLowerCase();
-
-  const autocomplete =
-    (element.getAttribute("autocomplete") || "")
-      .toLowerCase();
-
-  return (
-    type === "password" ||
-    autocomplete === "new-password" ||
-    autocomplete === "current-password"
+/**
+ * Escape regex characters.
+ */
+function escapeRegex(
+  value
+) {
+  return value.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&"
   );
 }
 
 
 /**
- * Returns:
- *   "SAFE"
- *   "CONFIRM"
+ * Match a phrase as a whole word/phrase.
  */
-export function classifyRisk(agentAction, element) {
+function containsPhrase(
+  text,
+  phrase
+) {
+  const normalizedText =
+    normalizeText(text);
 
-  if (!element) {
-    return "SAFE";
+  const normalizedPhrase =
+    normalizeText(phrase);
+
+  if (
+    !normalizedText ||
+    !normalizedPhrase
+  ) {
+    return false;
   }
 
-  // Typing into a password field is risky.
+  const expression =
+    new RegExp(
+      `(?:^|\\s|[^a-z0-9])${escapeRegex(
+        normalizedPhrase
+      )}(?:$|\\s|[^a-z0-9])`,
+      "i"
+    );
+
+  return expression.test(
+    normalizedText
+  );
+}
+
+
+/**
+ * Risky financial/destructive action language.
+ *
+ * Keep these semantic terms conservative.
+ *
+ * "wire" is intentionally treated as a complete word,
+ * preventing "wireless" from becoming a false positive.
+ */
+const RISKY_PHRASES = Object.freeze([
+  "delete",
+  "remove account",
+  "close account",
+  "terminate account",
+  "transfer",
+  "wire transfer",
+  "send money",
+  "send payment",
+  "pay",
+  "payment",
+  "purchase",
+  "buy",
+  "checkout",
+  "place order",
+  "confirm order",
+  "submit",
+  "submit order",
+  "submit payment",
+  "withdraw",
+  "withdrawal"
+]);
+
+
+/**
+ * Attributes that may contain useful accessible semantics.
+ */
+const SEMANTIC_ATTRIBUTES = Object.freeze([
+  "aria-label",
+  "aria-description",
+  "title",
+  "name",
+  "value",
+  "alt",
+  "role"
+]);
+
+
+function collectElementSemantics(
+  element
+) {
   if (
-    agentAction.action === "type" &&
-    isPasswordField(element)
+    !element ||
+    typeof element !== "object"
+  ) {
+    return "";
+  }
+
+  const parts = [];
+
+  // Do not read password values.
+  const type =
+    typeof element.type === "string"
+      ? element.type.toLowerCase()
+      : "";
+
+  if (type !== "password") {
+    if (
+      typeof element.innerText === "string"
+    ) {
+      parts.push(
+        element.innerText
+      );
+    }
+
+    if (
+      typeof element.textContent === "string"
+    ) {
+      parts.push(
+        element.textContent
+      );
+    }
+  }
+
+  for (
+    const attribute
+    of SEMANTIC_ATTRIBUTES
+  ) {
+
+    if (
+      attribute === "value" &&
+      type === "password"
+    ) {
+      continue;
+    }
+
+    try {
+      const value =
+        element.getAttribute(
+          attribute
+        );
+
+      if (value) {
+        parts.push(value);
+      }
+
+    } catch {
+      // Ignore inaccessible attributes.
+    }
+  }
+
+
+  return parts
+    .join(" ")
+    .slice(0, 5000);
+}
+
+
+function isPasswordTarget(
+  element
+) {
+  if (!element) {
+    return false;
+  }
+
+  const type =
+    typeof element.type === "string"
+      ? element.type.toLowerCase()
+      : "";
+
+  return (
+    type === "password"
+  );
+}
+
+
+/**
+ * Classify action risk.
+ *
+ * Returns:
+ *
+ * SAFE
+ * CONFIRM
+ */
+export function classifyRisk(
+  agentAction,
+  element
+) {
+
+  if (
+    !agentAction ||
+    typeof agentAction !== "object"
   ) {
     return "CONFIRM";
   }
 
-  // Clicks can represent risky operations.
-  if (agentAction.action === "click") {
 
-    const text =
-      getAccessibleText(element);
+  const action =
+    agentAction.action;
 
-    if (matchesRiskyKeyword(text)) {
+
+  if (
+    action === "type" &&
+    isPasswordTarget(element)
+  ) {
+    return "CONFIRM";
+  }
+
+
+  if (
+    action !== "click" &&
+    action !== "type"
+  ) {
+    /*
+     * Navigation must be handled by the explicit
+     * navigation policy in safetyGate.js.
+     *
+     * It must not silently reach this default as SAFE
+     * when the navigation shape is malformed.
+     */
+    return "SAFE";
+  }
+
+
+  const semantics =
+    collectElementSemantics(
+      element
+    );
+
+
+  for (
+    const phrase
+    of RISKY_PHRASES
+  ) {
+    if (
+      containsPhrase(
+        semantics,
+        phrase
+      )
+    ) {
       return "CONFIRM";
     }
   }
 
+
   return "SAFE";
 }
+
+
+export {
+  containsPhrase,
+  normalizeText,
+  isPasswordTarget
+};

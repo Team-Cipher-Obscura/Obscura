@@ -1,274 +1,415 @@
-import { evaluateAction } from "./safetyGate.js";
-import { executeAction } from "./executor.js";
-import { requestConfirmation } from "./confirmationFlow.js";
+import {
+  evaluateAction
+} from "./safetyGate.js";
+
+import {
+  executeAction
+} from "./executor.js";
+
+import {
+  requestConfirmation
+} from "./confirmationFlow.js";
+
+import {
+  validateAgentAction
+} from "./hardening/actionValidation.js";
+
+import {
+  logger
+} from "./hardening/logger.js";
 
 
-/**
- * Creates the result returned when a safety decision blocks
- * execution.
- */
-function createBlockedResult(agentAction, safetyResult) {
+function pipelineResult(
+  status,
+  action,
+  reason = null,
+  detail = null
+) {
   return {
-    status: "BLOCKED",
-    action: agentAction?.action || null,
-    target_id: agentAction?.target_id || null,
-    reason: safetyResult.reason || null,
-    detail: safetyResult.status || null
+    status,
+    action:
+      action?.action ?? null,
+    target_id:
+      action?.target_id ?? null,
+    reason,
+    detail
   };
 }
 
 
 /**
- * Creates a privacy-safe confirmation payload.
+ * Final P6 action boundary.
  *
- * Do not send the complete P5 action to the confirmation UI.
- * In particular, metadata.value may contain a password or
- * other sensitive input.
- */
-function createConfirmationAction(agentAction) {
-  if (!agentAction || typeof agentAction !== "object") {
-    return null;
-  }
-
-  return {
-    action: agentAction.action || null,
-    target_id: agentAction.target_id || null,
-    confidence:
-      typeof agentAction.confidence === "number"
-        ? agentAction.confidence
-        : null
-  };
-}
-
-
-/**
- * Creates a short, privacy-safe confirmation summary.
- *
- * Sensitive form values are intentionally never included.
- */
-function createTargetSummary(agentAction, element) {
-  if (agentAction?.action === "navigate") {
-    const url = agentAction?.metadata?.url;
-
-    if (!url) {
-      return "Navigation";
-    }
-
-    try {
-      const parsedUrl = new URL(
-        url,
-        window.location.href
-      );
-
-      return `Navigate to ${parsedUrl.origin}${parsedUrl.pathname}`;
-    } catch {
-      return "Navigation";
-    }
-  }
-
-  if (!element) {
-    return agentAction?.action || "Action";
-  }
-
-  const ariaLabel =
-    element.getAttribute("aria-label");
-
-  const title =
-    element.getAttribute("title");
-
-  const text =
-    element.innerText ||
-    element.textContent ||
-    "";
-
-  const summary =
-    ariaLabel ||
-    title ||
-    text;
-
-  const normalized =
-    summary
-      .replace(/\s+/g, " ")
-      .trim();
-
-  if (!normalized) {
-    return `${agentAction?.action || "Action"} target`;
-  }
-
-  return normalized.slice(0, 120);
-}
-
-
-/**
- * Process a structured P5 action.
- *
- * SAFE:
- *   safety check -> execute
- *
- * BLOCK:
- *   safety check -> blocked
- *
- * CONFIRM:
- *   safety check
- *      -> request user confirmation
- *      -> wait for response
- *      -> fresh safety check
- *      -> fresh target resolution
- *      -> fresh P3 sensitive check
- *      -> execute
- *
- * The DOM element returned by the first safety evaluation is
- * never reused after confirmation.
+ * P5 actions MUST enter here before execution.
  */
 export async function processAction(
-  agentAction,
-  {
-    sendMessage
-  } = {}
+  action
 ) {
 
-  // -----------------------------------------
-  // 1. FIRST SAFETY EVALUATION
-  // -----------------------------------------
-
-  const safetyResult =
-    evaluateAction(agentAction);
+  const startedAt =
+    performance.now();
 
 
-  // -----------------------------------------
-  // 2. BLOCKED
-  // -----------------------------------------
+  logger.action(
+    "action_received",
+    action
+  );
 
-  if (safetyResult.decision === "BLOCK") {
-    return createBlockedResult(
-      agentAction,
-      safetyResult
+
+  // --------------------------------------------------
+  // 1. Validate P5 contract
+  // --------------------------------------------------
+
+  const validation =
+    validateAgentAction(
+      action
+    );
+
+
+  if (!validation.valid) {
+
+    logger.warn(
+      "pipeline_action_rejected",
+      {
+        reason:
+          validation.reason,
+
+        action:
+          logger.sanitizeAction(
+            action
+          )
+      }
+    );
+
+    return pipelineResult(
+      "BLOCKED",
+      action,
+      validation.reason,
+      validation.reason
     );
   }
 
 
-  // -----------------------------------------
-  // 3. CONFIRMATION REQUIRED
-  // -----------------------------------------
+  // --------------------------------------------------
+  // 2. First safety evaluation
+  // --------------------------------------------------
 
-  if (safetyResult.decision === "CONFIRM") {
+  const safetyStartedAt =
+    performance.now();
 
-    const confirmationAction =
-      createConfirmationAction(agentAction);
+  const safety =
+    evaluateAction(
+      action
+    );
 
-    const targetSummary =
-      createTargetSummary(
-        agentAction,
-        safetyResult.element
-      );
+  const safetyDuration =
+    performance.now() -
+    safetyStartedAt;
 
 
-    let approved = false;
+  logger.debug(
+    "pipeline_safety_completed",
+    {
+      action:
+        action.action,
+
+      target_id:
+        action.target_id,
+
+      decision:
+        safety.decision,
+
+      status:
+        safety.status,
+
+      duration_ms:
+        Number(
+          safetyDuration.toFixed(3)
+        )
+    }
+  );
+
+
+  // --------------------------------------------------
+  // 3. Hard block
+  // --------------------------------------------------
+
+  if (
+    safety.decision === "BLOCK"
+  ) {
+
+    logger.warn(
+      "pipeline_safety_block",
+      {
+        action:
+          action.action,
+
+        target_id:
+          action.target_id,
+
+        reason:
+          safety.reason,
+
+        detail:
+          safety.status
+      }
+    );
+
+    return pipelineResult(
+      "BLOCKED",
+      action,
+      safety.reason,
+      safety.status
+    );
+  }
+
+
+  // --------------------------------------------------
+  // 4. Confirmation
+  // --------------------------------------------------
+
+  if (
+    safety.decision === "CONFIRM"
+  ) {
+
+    logger.info(
+      "pipeline_confirmation_started",
+      {
+        action:
+          action.action,
+
+        target_id:
+          action.target_id
+      }
+    );
+
+
+    const confirmationStartedAt =
+      performance.now();
+
+
+    let confirmation;
 
     try {
 
-      approved =
-        await requestConfirmation({
-          sendMessage,
-          action: confirmationAction,
-          targetSummary
-        });
+      confirmation =
+        await requestConfirmation(
+          action
+        );
 
     } catch (error) {
 
-      return {
-        status: "BLOCKED",
-        action: agentAction?.action || null,
-        target_id: agentAction?.target_id || null,
-        reason:
-          "CONFIRMATION_FAILED",
-        detail:
-          error?.message ||
-          "Confirmation request failed."
-      };
-    }
-
-
-    // No response, timeout, or explicit rejection
-    // must never result in execution.
-    if (!approved) {
-      return {
-        status: "CONFIRMATION_REJECTED",
-        action: agentAction?.action || null,
-        target_id: agentAction?.target_id || null,
-        reason: "USER_DID_NOT_APPROVE"
-      };
-    }
-
-
-    // -----------------------------------------
-    // 4. FRESH SAFETY EVALUATION
-    // -----------------------------------------
-    //
-    // This is the TOCTOU protection.
-    //
-    // The original safetyResult.element is intentionally
-    // NOT reused.
-    //
-    // evaluateAction() resolves the target again and checks
-    // the current P3 registry again.
-    //
-    // confirmationGranted only satisfies the confirmation
-    // requirement that the user has already approved.
-    //
-    const confirmedSafetyResult =
-      evaluateAction(
-        agentAction,
+      logger.error(
+        "confirmation_request_failed",
         {
-          confirmationGranted: true
+          error:
+            error instanceof Error
+              ? error.message
+              : "unknown"
+        }
+      );
+
+      return pipelineResult(
+        "CONFIRMATION_PENDING",
+        action,
+        "CONFIRMATION_ERROR",
+        "CONFIRMATION_ERROR"
+      );
+    }
+
+
+    const confirmationDuration =
+      performance.now() -
+      confirmationStartedAt;
+
+
+    logger.info(
+      "pipeline_confirmation_completed",
+      {
+        action:
+          action.action,
+
+        target_id:
+          action.target_id,
+
+        approved:
+          Boolean(
+            confirmation?.approved
+          ),
+
+        duration_ms:
+          Number(
+            confirmationDuration
+              .toFixed(3)
+          )
+      }
+    );
+
+
+    if (
+      !confirmation?.approved
+    ) {
+
+      return pipelineResult(
+        "BLOCKED",
+        action,
+        confirmation?.reason ||
+          "CONFIRMATION_REJECTED",
+        "CONFIRMATION_REJECTED"
+      );
+    }
+
+
+    // --------------------------------------------------
+    // 5. CRITICAL:
+    // Fresh safety evaluation after approval.
+    //
+    // Do NOT reuse safety.element.
+    // Do NOT reuse a stale DOM reference.
+    // --------------------------------------------------
+
+    logger.info(
+      "pipeline_confirmation_recheck_started",
+      {
+        action:
+          action.action,
+
+        target_id:
+          action.target_id
+      }
+    );
+
+
+    const recheck =
+      evaluateAction(
+        action,
+        {
+          confirmationGranted:
+            true
         }
       );
 
 
-    // P3 or target safety wins over the earlier approval.
-    if (confirmedSafetyResult.decision === "BLOCK") {
-      return createBlockedResult(
-        agentAction,
-        confirmedSafetyResult
+    if (
+      recheck.decision !==
+      "EXECUTE"
+    ) {
+
+      logger.warn(
+        "pipeline_confirmation_recheck_blocked",
+        {
+          action:
+            action.action,
+
+          target_id:
+            action.target_id,
+
+          decision:
+            recheck.decision,
+
+          status:
+            recheck.status,
+
+          reason:
+            recheck.reason
+        }
+      );
+
+
+      return pipelineResult(
+        "BLOCKED",
+        action,
+        recheck.reason ||
+          "SAFETY_RECHECK_FAILED",
+        recheck.status
       );
     }
 
 
-    // This is defensive. A correctly implemented
-    // confirmationGranted evaluation should not return
-    // CONFIRM, but if it ever does, fail closed.
-    if (
-      confirmedSafetyResult.decision === "CONFIRM"
-    ) {
-      return {
-        status: "BLOCKED",
-        action: agentAction?.action || null,
-        target_id: agentAction?.target_id || null,
-        reason:
-          "CONFIRMATION_REVALIDATION_FAILED",
-        detail:
-          confirmedSafetyResult.status || null
-      };
-    }
+    // --------------------------------------------------
+    // 6. Execute using the FRESH safety result
+    // --------------------------------------------------
+
+    const execution =
+      executeAction(
+        action,
+        recheck.element
+      );
 
 
-    // -----------------------------------------
-    // 5. EXECUTE FRESH TARGET
-    // -----------------------------------------
+    logger.info(
+      "pipeline_execution_completed",
+      {
+        action:
+          action.action,
 
-    return executeAction(
-      agentAction,
-      confirmedSafetyResult.element
+        target_id:
+          action.target_id,
+
+        execution_status:
+          execution.status
+      }
     );
+
+
+    return execution;
   }
 
 
-  // -----------------------------------------
-  // 6. SAFE EXECUTION
-  // -----------------------------------------
+  // --------------------------------------------------
+  // 7. Directly safe action
+  // --------------------------------------------------
 
-  return executeAction(
-    agentAction,
-    safetyResult.element
+  if (
+    safety.decision === "EXECUTE"
+  ) {
+
+    const execution =
+      executeAction(
+        action,
+        safety.element
+      );
+
+
+    logger.info(
+      "pipeline_execution_completed",
+      {
+        action:
+          action.action,
+
+        target_id:
+          action.target_id,
+
+        execution_status:
+          execution.status
+      }
+    );
+
+
+    return execution;
+  }
+
+
+  // --------------------------------------------------
+  // 8. Defensive fallback
+  // --------------------------------------------------
+
+  logger.error(
+    "pipeline_unknown_safety_decision",
+    {
+      decision:
+        safety.decision,
+
+      action:
+        action.action
+    }
+  );
+
+
+  return pipelineResult(
+    "BLOCKED",
+    action,
+    "UNKNOWN_SAFETY_DECISION",
+    safety.decision
   );
 }

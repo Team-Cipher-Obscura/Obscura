@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>P6 Hardening Tests</title>
+</head>
+
+<body>
+
+<h1>P6 Hardening Tests</h1>
+
+<button
+  id="safeButton"
+  data-agent-id="hardening_safe"
+>
+  Safe Button
+</button>
+
+<button
+  id="submitButton"
+  data-agent-id="hardening_submit"
+>
+  Submit Payment
+</button>
+
+<input
+  id="password"
+  data-agent-id="hardening_password"
+  type="password"
+>
+
+<pre id="output"></pre>
+
+
+<script type="module">
+
+import {
+  validateAgentAction
+} from "../hardening/actionValidation.js";
+
+import {
+  logger,
+  sanitizeForLog
+} from "../hardening/logger.js";
+
+import {
+  classifyRisk
+} from "../riskyActionRules.js";
+
+
+const output =
+  document.getElementById(
+    "output"
+  );
+
+
+let passed = 0;
+let failed = 0;
+
+
+function assert(
+  condition,
+  message
+) {
+
+  if (condition) {
+    passed++;
+
+    console.log(
+      "PASS:",
+      message
+    );
+
+  } else {
+    failed++;
+
+    console.error(
+      "FAIL:",
+      message
+    );
+  }
+}
+
+
+function runTests() {
+
+  // ---------------------------------------------
+  // 1. Valid click
+  // ---------------------------------------------
+
+  const validClick = {
+    action: "click",
+    target_id: "hardening_safe",
+    confidence: 0.95,
+    metadata: {}
+  };
+
+
+  const validClickResult =
+    validateAgentAction(
+      validClick
+    );
+
+
+  assert(
+    validClickResult.valid === true,
+    "Valid click should pass boundary validation"
+  );
+
+
+  // ---------------------------------------------
+  // 2. Unsupported action
+  // ---------------------------------------------
+
+  const unsupported = {
+    action: "delete",
+    target_id: "hardening_safe",
+    metadata: {}
+  };
+
+
+  const unsupportedResult =
+    validateAgentAction(
+      unsupported
+    );
+
+
+  assert(
+    unsupportedResult.valid === false,
+    "Unsupported action must be rejected"
+  );
+
+  assert(
+    unsupportedResult.reason ===
+      "UNSUPPORTED_ACTION",
+    "Unsupported action should have explicit reason"
+  );
+
+
+  // ---------------------------------------------
+  // 3. Invalid confidence
+  // ---------------------------------------------
+
+  const invalidConfidence = {
+    action: "click",
+    target_id: "hardening_safe",
+    confidence: 3,
+    metadata: {}
+  };
+
+
+  const confidenceResult =
+    validateAgentAction(
+      invalidConfidence
+    );
+
+
+  assert(
+    confidenceResult.valid === false,
+    "Confidence outside 0..1 must be rejected"
+  );
+
+
+  // ---------------------------------------------
+  // 4. Navigation target_id
+  // ---------------------------------------------
+
+  const malformedNavigation = {
+    action: "navigate",
+    target_id: "hardening_safe",
+    confidence: 0.95,
+    metadata: {
+      url: "https://example.com"
+    }
+  };
+
+
+  const malformedNavigationResult =
+    validateAgentAction(
+      malformedNavigation
+    );
+
+
+  assert(
+    malformedNavigationResult.valid === false,
+    "Navigation with target_id must be rejected"
+  );
+
+  assert(
+    malformedNavigationResult.reason ===
+      "NAVIGATION_TARGET_ID_FORBIDDEN",
+    "Navigation target_id rejection must be explicit"
+  );
+
+
+  // ---------------------------------------------
+  // 5. Missing navigation URL
+  // ---------------------------------------------
+
+  const missingNavigationUrl = {
+    action: "navigate",
+    target_id: null,
+    metadata: {}
+  };
+
+
+  const missingUrlResult =
+    validateAgentAction(
+      missingNavigationUrl
+    );
+
+
+  assert(
+    missingUrlResult.valid === false,
+    "Navigation without URL must be rejected"
+  );
+
+
+  // ---------------------------------------------
+  // 6. Password typing
+  // ---------------------------------------------
+
+  const password =
+    document.getElementById(
+      "password"
+    );
+
+
+  const passwordRisk =
+    classifyRisk(
+      {
+        action: "type",
+        target_id: "hardening_password",
+        metadata: {
+          value: "THIS MUST NEVER BE LOGGED"
+        }
+      },
+      password
+    );
+
+
+  assert(
+    passwordRisk === "CONFIRM",
+    "Password typing must require confirmation"
+  );
+
+
+  // ---------------------------------------------
+  // 7. Risky button
+  // ---------------------------------------------
+
+  const submit =
+    document.getElementById(
+      "submitButton"
+    );
+
+
+  const submitRisk =
+    classifyRisk(
+      {
+        action: "click",
+        target_id: "hardening_submit",
+        metadata: {}
+      },
+      submit
+    );
+
+
+  assert(
+    submitRisk === "CONFIRM",
+    "Submit Payment must require confirmation"
+  );
+
+
+  // ---------------------------------------------
+  // 8. Wireless false positive
+  // ---------------------------------------------
+
+  const wireless =
+    document.createElement(
+      "button"
+    );
+
+
+  wireless.textContent =
+    "Wireless Settings";
+
+
+  const wirelessRisk =
+    classifyRisk(
+      {
+        action: "click",
+        target_id: "wireless",
+        metadata: {}
+      },
+      wireless
+    );
+
+
+  assert(
+    wirelessRisk === "SAFE",
+    "Wireless must not match wire"
+  );
+
+
+  // ---------------------------------------------
+  // 9. Sensitive log value
+  // ---------------------------------------------
+
+  const sanitized =
+    sanitizeForLog({
+      value:
+        "SUPER_SECRET_PASSWORD",
+
+      password:
+        "ANOTHER_SECRET",
+
+      normal:
+        "safe"
+    });
+
+
+  assert(
+    sanitized.value ===
+      "[REDACTED]",
+    "value must be redacted from logs"
+  );
+
+
+  assert(
+    sanitized.password ===
+      "[REDACTED]",
+    "password must be redacted from logs"
+  );
+
+
+  assert(
+    sanitized.normal ===
+      "safe",
+    "non-sensitive diagnostics should survive sanitization"
+  );
+
+
+  // ---------------------------------------------
+  // 10. Action logger sanitization
+  // ---------------------------------------------
+
+  const sanitizedAction =
+    logger.sanitizeAction({
+      action: "type",
+      target_id: "hardening_password",
+      confidence: 0.99,
+      metadata: {
+        value:
+          "REAL_SECRET"
+      }
+    });
+
+
+  assert(
+    sanitizedAction.metadata.value ===
+      "[REDACTED]",
+    "Action logger must redact typed values"
+  );
+
+
+  // ---------------------------------------------
+  // Final
+  // ---------------------------------------------
+
+  output.textContent =
+    [
+      `Passed: ${passed}`,
+      `Failed: ${failed}`,
+      "",
+      failed === 0
+        ? "ALL HARDENING TESTS PASSED"
+        : "HARDENING TESTS FAILED"
+    ].join("\n");
+
+
+  console.log(
+    `P6 hardening: ${passed} passed, ${failed} failed`
+  );
+}
+
+
+runTests();
+
+</script>
+
+</body>
+</html>

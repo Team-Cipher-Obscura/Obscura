@@ -1,40 +1,42 @@
-import { resolveTarget }
-  from "./targetResolver.js";
+import {
+  resolveTarget
+} from "./targetResolver.js";
 
-import { classifyRisk }
-  from "./riskyActionRules.js";
+import {
+  classifyRisk
+} from "./riskyActionRules.js";
 
 import {
   isSensitive,
   getSensitiveType
 } from "./sensitiveRegistry.js";
 
+import {
+  validateAgentAction
+} from "./hardening/actionValidation.js";
 
-/**
- * P5 is only allowed to emit these action types.
- *
- * Do not add semantic actions such as:
- * delete | purchase | submit | pay
- *
- * Those are represented by the risk of a resolved DOM target,
- * not by the action type itself.
- */
-export const SUPPORTED_ACTIONS = new Set([
-  "click",
-  "type",
-  "scroll",
-  "navigate",
-  "wait"
-]);
+import {
+  logger
+} from "./hardening/logger.js";
+
+import {
+  isAllowedProtocol
+} from "./hardening/securityPolicy.js";
 
 
-/**
- * Navigation is deliberately restricted to HTTP(S).
- *
- * This is a safety-gate check, not merely an executor check.
- * The executor has its own defense-in-depth validation too.
- */
-export function isAllowedNavigationUrl(url) {
+export const SUPPORTED_ACTIONS =
+  new Set([
+    "click",
+    "type",
+    "scroll",
+    "navigate",
+    "wait"
+  ]);
+
+
+export function isAllowedNavigationUrl(
+  url
+) {
   if (
     typeof url !== "string" ||
     !url.trim()
@@ -43,29 +45,26 @@ export function isAllowedNavigationUrl(url) {
   }
 
   try {
-    const parsedUrl =
+
+    const parsed =
       new URL(
         url,
         window.location.href
       );
 
-    return (
-      parsedUrl.protocol === "http:" ||
-      parsedUrl.protocol === "https:"
+    return isAllowedProtocol(
+      parsed.protocol
     );
+
   } catch {
     return false;
   }
 }
 
 
-/**
- * Metadata must be an object.
- *
- * null, arrays, strings, numbers, booleans, etc.
- * are not valid P5 metadata.
- */
-function isValidMetadata(metadata) {
+function isValidMetadata(
+  metadata
+) {
   return (
     metadata !== null &&
     typeof metadata === "object" &&
@@ -74,9 +73,6 @@ function isValidMetadata(metadata) {
 }
 
 
-/**
- * Standard safety-gate BLOCK result.
- */
 function blockResult({
   action = null,
   target_id = null,
@@ -95,30 +91,6 @@ function blockResult({
 }
 
 
-/**
- * Main P6 safety decision.
- *
- * Possible decisions:
- *
- * EXECUTE
- * CONFIRM
- * BLOCK
- *
- * Phase 4 confirmation flow calls this gate again with:
- *
- *   { confirmationGranted: true }
- *
- * That second evaluation is still performed from scratch:
- * - action validation
- * - metadata validation
- * - navigation validation
- * - target resolution
- * - P3 sensitive check
- * - risk classification
- *
- * The confirmation flag only means the user has already approved
- * the previously classified risky action. It does NOT bypass safety.
- */
 export function evaluateAction(
   agentAction,
   {
@@ -126,18 +98,39 @@ export function evaluateAction(
   } = {}
 ) {
 
-  // --------------------------------------------------
-  // 0. Basic action-object validation
-  // --------------------------------------------------
+  const validation =
+    validateAgentAction(
+      agentAction
+    );
 
-  if (
-    !agentAction ||
-    typeof agentAction !== "object" ||
-    Array.isArray(agentAction)
-  ) {
+
+  if (!validation.valid) {
+
+    logger.warn(
+      "action_validation_blocked",
+      {
+        reason:
+          validation.reason,
+
+        action:
+          logger.sanitizeAction(
+            agentAction
+          )
+      }
+    );
+
     return blockResult({
-      status: "INVALID_ACTION",
-      reason: "ACTION_OBJECT_REQUIRED"
+      action:
+        agentAction?.action ?? null,
+
+      target_id:
+        agentAction?.target_id ?? null,
+
+      status:
+        validation.reason,
+
+      reason:
+        validation.reason
     });
   }
 
@@ -149,61 +142,48 @@ export function evaluateAction(
   } = agentAction;
 
 
-  // --------------------------------------------------
-  // 1. Action-type allowlist
-  // --------------------------------------------------
-
-  if (
-    typeof action !== "string" ||
-    !SUPPORTED_ACTIONS.has(action)
-  ) {
-    return blockResult({
-      action:
-        typeof action === "string"
-          ? action
-          : null,
-      target_id:
-        typeof target_id === "string"
-          ? target_id
-          : null,
-      status: "UNSUPPORTED_ACTION",
-      reason:
-        `Unsupported action type: ${String(action)}`
-    });
-  }
+  logger.action(
+    "safety_evaluation_started",
+    agentAction,
+    {
+      confirmationGranted:
+        Boolean(
+          confirmationGranted
+        )
+    }
+  );
 
 
   // --------------------------------------------------
-  // 2. Metadata shape validation
-  // --------------------------------------------------
-
-  if (!isValidMetadata(metadata)) {
-    return blockResult({
-      action,
-      target_id:
-        typeof target_id === "string"
-          ? target_id
-          : null,
-      status: "INVALID_METADATA",
-      reason: "ACTION_METADATA_MUST_BE_AN_OBJECT"
-    });
-  }
-
-
-  // --------------------------------------------------
-  // 3. Navigation-specific validation
-  //
-  // IMPORTANT:
-  // This happens BEFORE confirmation.
-  //
-  // Therefore javascript:, data:, file:, ftp:, malformed
-  // and missing URLs are BLOCKED immediately rather than
-  // presented to the user for approval.
+  // Navigation policy
   // --------------------------------------------------
 
   if (action === "navigate") {
 
-    const url = metadata.url;
+    if (
+      target_id !== null &&
+      target_id !== undefined
+    ) {
+      logger.warn(
+        "navigation_target_id_blocked",
+        {
+          target_id
+        }
+      );
+
+      return blockResult({
+        action,
+        target_id,
+        status:
+          "INVALID_ACTION",
+        reason:
+          "Navigate actions must not include a target_id."
+      });
+    }
+
+
+    const url =
+      metadata.url;
 
 
     if (
@@ -213,141 +193,203 @@ export function evaluateAction(
       return blockResult({
         action,
         target_id: null,
-        status: "NAVIGATION_URL_REQUIRED",
-        reason: "Navigation URL is required."
+        status:
+          "NAVIGATION_URL_REQUIRED",
+        reason:
+          "Navigation URL is required."
       });
     }
 
 
-    if (!isAllowedNavigationUrl(url)) {
+    if (
+      !isAllowedNavigationUrl(
+        url
+      )
+    ) {
+
+      logger.warn(
+        "unsafe_navigation_blocked",
+        {
+          action,
+          protocol:
+            (() => {
+              try {
+                return new URL(
+                  url,
+                  window.location.href
+                ).protocol;
+              } catch {
+                return "invalid";
+              }
+            })()
+        }
+      );
+
       return blockResult({
         action,
         target_id: null,
-        status: "UNSAFE_NAVIGATION_BLOCKED",
+        status:
+          "UNSAFE_NAVIGATION_BLOCKED",
         reason:
           "Navigation URL scheme is not allowed."
       });
     }
   }
 
-  // Navigation is a targetless action.
-// A non-null target_id indicates a malformed action and must
-// never be allowed to bypass navigation confirmation.
-if (
-  action === "navigate" &&
-  target_id !== null &&
-  target_id !== undefined
-) {
-  return blockResult({
-    action,
-    target_id,
-    status: "INVALID_ACTION",
-    reason:
-      "Navigate actions must not include a target_id."
-  });
-}
-
 
   // --------------------------------------------------
-  // 4. Actions that do not require a DOM target
+  // Targetless actions
   // --------------------------------------------------
 
   if (!target_id) {
 
-    // Navigation has already passed its URL validation.
-    //
-    // It changes browser destination, so it requires
-    // confirmation unless the caller is performing the
-    // second, post-approval safety evaluation.
     if (action === "navigate") {
 
-      if (confirmationGranted) {
+      if (
+        confirmationGranted
+      ) {
+        logger.info(
+          "navigation_confirmation_granted"
+        );
+
         return {
           decision: "EXECUTE",
-          status: "NO_TARGET_ACTION",
+          status:
+            "CONFIRMATION_GRANTED",
           element: null,
           reason: null
         };
       }
 
+
       return {
         decision: "CONFIRM",
-        status: "CONFIRMATION_REQUIRED",
+        status:
+          "CONFIRMATION_REQUIRED",
         element: null,
-        reason: "NAVIGATION_REQUIRES_CONFIRMATION"
+        reason:
+          "NAVIGATION_REQUIRES_CONFIRMATION"
       };
     }
 
 
-    // These actions are explicitly allowed without a target.
     if (
       action === "scroll" ||
       action === "wait"
     ) {
       return {
         decision: "EXECUTE",
-        status: "NO_TARGET_ACTION",
+        status:
+          "NO_TARGET_ACTION",
         element: null,
         reason: null
       };
     }
 
 
-    // click/type require a DOM target.
     return blockResult({
       action,
       target_id: null,
-      status: "INVALID_ACTION",
-      reason: "TARGET_ID_REQUIRED"
+      status:
+        "INVALID_ACTION",
+      reason:
+        "TARGET_ID_REQUIRED"
     });
   }
 
 
   // --------------------------------------------------
-  // 5. Resolve the current live target
-  //
-  // This is deliberately performed every time evaluateAction()
-  // is called. Phase 4 therefore gets fresh target resolution
-  // after confirmation.
+  // Fresh target resolution
   // --------------------------------------------------
 
+  const resolutionStartedAt =
+    performance.now();
+
   const resolution =
-    resolveTarget(target_id);
+    resolveTarget(
+      target_id
+    );
+
+  const resolutionDuration =
+    performance.now() -
+    resolutionStartedAt;
+
+
+  logger.debug(
+    "target_resolution_completed",
+    {
+      target_id,
+      success:
+        Boolean(
+          resolution.success
+        ),
+      status:
+        resolution.status,
+      duration_ms:
+        Number(
+          resolutionDuration.toFixed(3)
+        )
+    }
+  );
 
 
   if (!resolution.success) {
     return blockResult({
       action,
       target_id,
-      status: resolution.status,
-      reason: "TARGET_COULD_NOT_BE_RESOLVED"
+      status:
+        resolution.status,
+      reason:
+        "TARGET_COULD_NOT_BE_RESOLVED"
     });
   }
 
 
   // --------------------------------------------------
-  // 6. P3 HARD VETO
-  //
-  // This always wins, including after confirmation.
+  // P3 hard veto
   // --------------------------------------------------
 
-  if (isSensitive(target_id)) {
+  if (
+    isSensitive(
+      target_id
+    )
+  ) {
+
+    const sensitiveType =
+      getSensitiveType(
+        target_id
+      );
+
+    logger.warn(
+      "p3_sensitive_target_blocked",
+      {
+        target_id,
+        sensitive_type:
+          sensitiveType || "unknown"
+      }
+    );
+
     return blockResult({
       action,
       target_id,
-      status: "SENSITIVE_ELEMENT_BLOCKED",
-      element: resolution.element,
+      status:
+        "SENSITIVE_ELEMENT_BLOCKED",
+      element:
+        resolution.element,
       reason:
         `P3 flagged target as sensitive: ${
-          getSensitiveType(target_id) || "unknown"
+          sensitiveType || "unknown"
         }`
     });
   }
 
 
   // --------------------------------------------------
-  // 7. Risk classification
+  // Risk classification
   // --------------------------------------------------
+
+  const riskStartedAt =
+    performance.now();
 
   const risk =
     classifyRisk(
@@ -355,48 +397,91 @@ if (
       resolution.element
     );
 
+  const riskDuration =
+    performance.now() -
+    riskStartedAt;
+
+
+  logger.debug(
+    "risk_classification_completed",
+    {
+      action,
+      target_id,
+      risk,
+      duration_ms:
+        Number(
+          riskDuration.toFixed(3)
+        )
+    }
+  );
+
 
   // --------------------------------------------------
-  // 8. Confirmation required
-  //
-  // On the initial evaluation:
-  //   risky action -> CONFIRM
-  //
-  // On the post-approval evaluation:
-  //   risky action + confirmationGranted -> EXECUTE
-  //
-  // Importantly, confirmationGranted does NOT skip any
-  // validation above.
+  // Confirmation
   // --------------------------------------------------
 
-  if (risk === "CONFIRM") {
+  if (
+    risk === "CONFIRM"
+  ) {
 
-    if (confirmationGranted) {
+    if (
+      confirmationGranted
+    ) {
+
+      logger.info(
+        "confirmation_recheck_approved",
+        {
+          action,
+          target_id
+        }
+      );
+
       return {
         decision: "EXECUTE",
-        status: "CONFIRMATION_GRANTED",
-        element: resolution.element,
+        status:
+          "CONFIRMATION_GRANTED",
+        element:
+          resolution.element,
         reason: null
       };
     }
 
+
+    logger.info(
+      "confirmation_required",
+      {
+        action,
+        target_id
+      }
+    );
+
     return {
       decision: "CONFIRM",
-      status: "CONFIRMATION_REQUIRED",
-      element: resolution.element,
-      reason: "RISKY_ACTION"
+      status:
+        "CONFIRMATION_REQUIRED",
+      element:
+        resolution.element,
+      reason:
+        "RISKY_ACTION"
     };
   }
 
 
-  // --------------------------------------------------
-  // 9. Safe action
-  // --------------------------------------------------
+  logger.info(
+    "safe_action_approved",
+    {
+      action,
+      target_id
+    }
+  );
+
 
   return {
     decision: "EXECUTE",
-    status: "TARGET_RESOLVED",
-    element: resolution.element,
+    status:
+      "TARGET_RESOLVED",
+    element:
+      resolution.element,
     reason: null
   };
 }

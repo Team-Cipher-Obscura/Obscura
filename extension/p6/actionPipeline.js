@@ -12,6 +12,9 @@ import {
   registerConfirmationMessageListener
 } from "./confirmationFlow.js";
 
+import {
+  createExecutionResult
+} from "./executionResult.js";
 
 function getDefaultSendMessage() {
   if (
@@ -19,357 +22,156 @@ function getDefaultSendMessage() {
     chrome.runtime &&
     typeof chrome.runtime.sendMessage === "function"
   ) {
-    return (message) =>
-      chrome.runtime.sendMessage(message);
+    return chrome.runtime.sendMessage.bind(chrome.runtime);
   }
 
   return null;
 }
 
-
-function blockedResult(
-  agentAction,
-  safetyResult
-) {
-  return {
+function blockedResult(action, reason) {
+  return createExecutionResult({
     status: "BLOCKED",
-
-    action:
-      agentAction?.action || null,
-
-    target_id:
-      agentAction?.target_id || null,
-
-    reason:
-      safetyResult?.reason ||
-      "SAFETY_BLOCKED",
-
-    detail:
-      safetyResult?.status || null
-  };
+    action: action?.action ?? null,
+    target_id: action?.target_id ?? null,
+    reason
+  });
 }
 
-
-function confirmationPendingResult(
-  agentAction,
-  safetyResult,
-  reason = null
-) {
-  return {
+function confirmationPendingResult(action, reason) {
+  return createExecutionResult({
     status: "CONFIRMATION_PENDING",
-
-    action:
-      agentAction?.action || null,
-
-    target_id:
-      agentAction?.target_id || null,
-
-    reason:
-      reason ||
-      safetyResult?.reason ||
-      "CONFIRMATION_REQUIRED",
-
-    detail:
-      safetyResult?.status || null
-  };
+    action: action?.action ?? null,
+    target_id: action?.target_id ?? null,
+    reason
+  });
 }
-
 
 /**
- * Process a P5 AgentResponse through the complete P6
- * safety and execution pipeline.
+ * Main P6 action pipeline:
  *
- * Risky actions:
- *
- *   evaluate
- *      ↓
- *   CONFIRM
- *      ↓
- *   requestConfirmation
- *      ↓
- *   user response
- *      ↓
- *   FRESH evaluate with confirmationGranted=true
- *      ↓
- *   execute
- *
- * The second evaluation is deliberately required because
- * the DOM and P3 sensitive map can change while the user
- * is deciding.
+ * 1. Validate + resolve + inspect fresh P3 state.
+ * 2. Block immediately if unsafe.
+ * 3. Request confirmation when required.
+ * 4. After approval, repeat the complete safety evaluation with fresh state.
+ * 5. Execute only the freshly revalidated target.
  */
 export async function processAction(
   agentAction,
   sendMessage = getDefaultSendMessage()
 ) {
-  /*
-   * Ensure the browser-level confirmation response listener
-   * is registered before a confirmation request can be made.
-   */
   registerConfirmationMessageListener();
 
+  const initialEvaluation = evaluateAction(agentAction);
 
-  /*
-   * ---------------------------------------------
-   * FIRST SAFETY EVALUATION
-   * ---------------------------------------------
-   */
-
-  const safetyResult =
-    evaluateAction(
-      agentAction
-    );
-
-
-  /*
-   * ---------------------------------------------
-   * HARD BLOCK
-   * ---------------------------------------------
-   */
-
-  if (
-    safetyResult.decision === "BLOCK"
-  ) {
+  if (initialEvaluation.status === "BLOCKED") {
     return blockedResult(
       agentAction,
-      safetyResult
+      initialEvaluation.reason
     );
   }
 
-
-  /*
-   * ---------------------------------------------
-   * CONFIRMATION
-   * ---------------------------------------------
-   */
-
-  if (
-    safetyResult.decision === "CONFIRM"
-  ) {
-    if (
-      typeof sendMessage !== "function"
-    ) {
-      return {
-        status: "FAILED",
-
-        action:
-          agentAction?.action || null,
-
-        target_id:
-          agentAction?.target_id || null,
-
-        reason:
-          "Confirmation transport is unavailable.",
-
-        detail:
-          "CONFIRMATION_TRANSPORT_UNAVAILABLE"
-      };
-    }
-
-
-    let confirmationPayload;
-
-    try {
-      confirmationPayload =
-        buildConfirmationPayload(
-          agentAction,
-          safetyResult.element
-        );
-    } catch (error) {
-      return {
-        status: "FAILED",
-
-        action:
-          agentAction?.action || null,
-
-        target_id:
-          agentAction?.target_id || null,
-
-        reason:
-          error?.message ||
-          "Could not build confirmation request.",
-
-        detail:
-          "CONFIRMATION_PAYLOAD_ERROR"
-      };
-    }
-
-
-    const approved =
-      await requestConfirmation({
-        sendMessage,
-
-        action:
-          confirmationPayload.action,
-
-        targetSummary:
-          confirmationPayload.targetSummary
-      });
-
-
-    /*
-     * -------------------------------------------
-     * USER REJECTED / TIMEOUT
-     * -------------------------------------------
-     */
-
-    if (!approved) {
-      return {
-        status: "BLOCKED",
-
-        action:
-          agentAction?.action || null,
-
-        target_id:
-          agentAction?.target_id || null,
-
-        reason:
-          "CONFIRMATION_REJECTED",
-
-        detail:
-          "CONFIRMATION_DENIED"
-      };
-    }
-
-
-    /*
-     * -------------------------------------------
-     * CRITICAL PHASE 6 FIX
-     * -------------------------------------------
-     *
-     * The action has now been explicitly approved by
-     * the user.
-     *
-     * BUT we must NOT reuse the previous safety result.
-     *
-     * The DOM and P3 sensitive map may have changed.
-     *
-     * Therefore run the safety gate again.
-     *
-     * confirmationGranted=true tells safetyGate that this
-     * specific action has already received confirmation,
-     * allowing a previously-CONFIRM action to proceed to
-     * execution after all other safety checks pass.
-     *
-     * Without this flag:
-     *
-     *   CONFIRM
-     *      ↓
-     *   approve
-     *      ↓
-     *   evaluateAction()
-     *      ↓
-     *   CONFIRM again
-     *
-     * which makes every risky action permanently
-     * CONFIRMATION_PENDING.
-     */
-    const recheckResult =
-      evaluateAction(
-        agentAction,
-        {
-          confirmationGranted: true
-        }
-      );
-
-
-    /*
-     * A new hard safety violation always wins over
-     * the previous user approval.
-     */
-    if (
-      recheckResult.decision === "BLOCK"
-    ) {
+  if (initialEvaluation.status === "CONFIRMATION_PENDING") {
+    if (typeof sendMessage !== "function") {
       return blockedResult(
         agentAction,
-        recheckResult
+        "CONFIRMATION_CHANNEL_UNAVAILABLE"
       );
     }
 
+    const confirmationPayload =
+      buildConfirmationPayload(
+        agentAction,
+        initialEvaluation.element
+      );
+
+    const approved = await requestConfirmation({
+      sendMessage,
+      action: confirmationPayload.action,
+      targetSummary: confirmationPayload.targetSummary
+    });
+
+    if (!approved) {
+      return blockedResult(
+        agentAction,
+        "CONFIRMATION_REJECTED"
+      );
+    }
 
     /*
-     * In normal operation a correctly implemented
-     * confirmationGranted path should not return CONFIRM.
+     * Critical TOCTOU protection:
      *
-     * Keep this defensive branch so a future safety-rule
-     * change cannot silently execute an action that has
-     * acquired a NEW confirmation requirement.
+     * Approval does NOT authorize the stale target/evaluation.
+     * The entire safety evaluation is repeated using fresh DOM/P3 state.
+     *
+     * confirmationGranted prevents the freshly evaluated risky action
+     * from immediately asking for the same confirmation again.
      */
+    const recheckEvaluation = evaluateAction(
+      agentAction,
+      {
+        confirmationGranted: true
+      }
+    );
+
+    if (recheckEvaluation.status === "BLOCKED") {
+      return blockedResult(
+        agentAction,
+        recheckEvaluation.reason
+      );
+    }
+
     if (
-      recheckResult.decision === "CONFIRM"
+      recheckEvaluation.status ===
+      "CONFIRMATION_PENDING"
     ) {
       return confirmationPendingResult(
         agentAction,
-        recheckResult,
-        "Action still requires confirmation."
+        "CONFIRMATION_REQUIRED_AFTER_RECHECK"
       );
     }
 
-
-    /*
-     * Execute using the element obtained by the FRESH
-     * safety evaluation.
-     *
-     * Never use safetyResult.element from before confirmation.
-     */
-    return executeAction(
+    return await executeAction(
       agentAction,
-      recheckResult.element
+      recheckEvaluation.element
     );
   }
 
-
-  /*
-   * ---------------------------------------------
-   * SAFE ACTION
-   * ---------------------------------------------
-   */
-
-  return executeAction(
+  return await executeAction(
     agentAction,
-    safetyResult.element
+    initialEvaluation.element
   );
 }
 
-
 /**
- * Backward-compatible helper.
+ * Backwards-compatible helper for callers that already have an action
+ * and expect the pipeline to execute it after a successful safety check.
  *
- * This helper intentionally does not manufacture confirmation.
- * If the action currently requires confirmation, it reports
- * CONFIRMATION_PENDING.
+ * This function is deliberately async because executeAction() is async.
  */
-export function executeConfirmedAction(
+export async function executeConfirmedAction(
   agentAction
 ) {
-  const safetyResult =
-    evaluateAction(
-      agentAction
-    );
+  const evaluation = evaluateAction(agentAction);
 
-
-  if (
-    safetyResult.decision === "BLOCK"
-  ) {
+  if (evaluation.status === "BLOCKED") {
     return blockedResult(
       agentAction,
-      safetyResult
+      evaluation.reason
     );
   }
 
-
   if (
-    safetyResult.decision === "CONFIRM"
+    evaluation.status ===
+    "CONFIRMATION_PENDING"
   ) {
     return confirmationPendingResult(
       agentAction,
-      safetyResult,
-      "Confirmation is still required."
+      evaluation.reason
     );
   }
 
-
-  return executeAction(
+  return await executeAction(
     agentAction,
-    safetyResult.element
+    evaluation.element
   );
 }

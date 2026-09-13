@@ -1,130 +1,105 @@
-import {
-  isAllowedProtocol
-} from "./hardening/securityPolicy.js";
+import { isAllowedProtocol } from "./hardening/securityPolicy.js";
+import { createExecutionResult } from "./executionResult.js";
 
-import {
-  createExecutionResult
-} from "./executionResult.js";
-
-
-function failed(
-  action,
-  target_id,
-  reason
-) {
-  return createExecutionResult(
-    "FAILED",
+function failed(action, targetId, reason) {
+  return createExecutionResult({
+    status: "FAILED",
     action,
-    target_id,
+    target_id: targetId ?? null,
     reason
-  );
+  });
 }
 
-
-function blocked(
-  action,
-  target_id,
-  reason
-) {
-  return createExecutionResult(
-    "BLOCKED",
+function blocked(action, targetId, reason) {
+  return createExecutionResult({
+    status: "BLOCKED",
     action,
-    target_id,
+    target_id: targetId ?? null,
     reason
-  );
+  });
 }
 
-
-function executed(
-  action,
-  target_id
-) {
-  return createExecutionResult(
-    "EXECUTED",
+function executed(action, targetId, reason = null) {
+  return createExecutionResult({
+    status: "EXECUTED",
     action,
-    target_id,
-    null
-  );
+    target_id: targetId ?? null,
+    reason
+  });
 }
 
-
-/**
- * Resolve the navigation URL from an AgentResponse.
- *
- * P5 navigation actions carry their URL in metadata.url.
- */
-function getNavigationUrl(
-  agentAction
-) {
-  const url =
-    agentAction?.metadata?.url;
-
-  if (
-    typeof url !== "string" ||
-    url.trim() === ""
-  ) {
+function getNavigationUrl(agentAction) {
+  if (!agentAction || !agentAction.metadata) {
     return null;
   }
 
-  return url.trim();
+  return agentAction.metadata.url ?? null;
 }
 
-
 /**
- * Navigation URL validation helper retained for tests
- * and backwards compatibility.
+ * Kept exported for backwards compatibility and tests.
  *
- * The actual protocol decision is delegated to the
- * centralized security policy.
+ * The actual protocol allowlist lives in securityPolicy.js.
+ * There is deliberately no second local protocol list here.
  */
-export function isAllowedNavigationUrl(
-  url
-) {
-  if (
-    typeof url !== "string" ||
-    url.trim() === ""
-  ) {
+export function isAllowedNavigationUrl(url) {
+  if (typeof url !== "string" || !url.trim()) {
     return false;
   }
 
-  let parsed;
-
   try {
-    parsed =
-      new URL(url);
+    const parsed = new URL(url);
+    return isAllowedProtocol(parsed.protocol);
   } catch {
     return false;
   }
-
-  return isAllowedProtocol(
-    parsed.protocol
-  );
 }
 
+function getElementTargetId(agentAction) {
+  return agentAction?.target_id ?? null;
+}
 
-/**
- * Execute a click action.
- */
-function executeClick(
-  agentAction,
-  element
-) {
-  if (!element) {
-    return failed(
-      agentAction.action,
-      agentAction.target_id,
-      "TARGET_REQUIRED"
-    );
+function isSupportedTextInput(element) {
+  if (!element || element.tagName !== "INPUT") {
+    return element?.tagName === "TEXTAREA";
   }
 
-  if (
-    typeof element.click !== "function"
-  ) {
-    return failed(
-      agentAction.action,
-      agentAction.target_id,
-      "TARGET_NOT_CLICKABLE"
-    );
+  const type = (element.type || "text").toLowerCase();
+
+  return [
+    "text",
+    "email",
+    "search",
+    "tel",
+    "url",
+    "password",
+    "number"
+  ].includes(type);
+}
+
+function setNativeInputValue(element, value) {
+  const prototype =
+    element instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+
+  const descriptor = Object.getOwnPropertyDescriptor(
+    prototype,
+    "value"
+  );
+
+  if (descriptor && typeof descriptor.set === "function") {
+    descriptor.set.call(element, value);
+  } else {
+    element.value = value;
+  }
+}
+
+function executeClick(agentAction, element) {
+  const targetId = getElementTargetId(agentAction);
+
+  if (!element) {
+    return failed(agentAction.action, targetId, "TARGET_NOT_FOUND");
   }
 
   try {
@@ -132,354 +107,184 @@ function executeClick(
 
     return executed(
       agentAction.action,
-      agentAction.target_id
+      targetId
     );
   } catch (error) {
     return failed(
       agentAction.action,
-      agentAction.target_id,
-      error?.message ||
-        "CLICK_FAILED"
+      targetId,
+      error?.message || "CLICK_FAILED"
     );
   }
 }
 
+function executeType(agentAction, element) {
+  const targetId = getElementTargetId(agentAction);
 
-/**
- * Execute a type action using the native value setter.
- *
- * This works with frameworks such as React that intercept
- * ordinary property assignment.
- */
-function executeType(
-  agentAction,
-  element
-) {
   if (!element) {
+    return failed(agentAction.action, targetId, "TARGET_NOT_FOUND");
+  }
+
+  if (!isSupportedTextInput(element)) {
     return failed(
       agentAction.action,
-      agentAction.target_id,
-      "TARGET_REQUIRED"
+      targetId,
+      "INVALID_TYPE_TARGET"
     );
   }
 
-  const tagName =
-    (
-      element.tagName ||
-      ""
-    ).toLowerCase();
+  const value = agentAction?.metadata?.text;
 
-  const type =
-    (
-      element.getAttribute("type") ||
-      ""
-    ).toLowerCase();
-
-  const supported =
-    tagName === "textarea" ||
-    (
-      tagName === "input" &&
-      (
-        type === "" ||
-        type === "text" ||
-        type === "email" ||
-        type === "search" ||
-        type === "tel" ||
-        type === "url" ||
-        type === "password" ||
-        type === "number"
-      )
-    );
-
-  if (!supported) {
+  if (typeof value !== "string") {
     return failed(
       agentAction.action,
-      agentAction.target_id,
-      "UNSUPPORTED_TYPING_TARGET"
+      targetId,
+      "TYPE_VALUE_MISSING"
     );
   }
-
-
-  const value =
-    agentAction?.metadata?.text ??
-    agentAction?.metadata?.value;
-
-  if (
-    typeof value !== "string"
-  ) {
-    return failed(
-      agentAction.action,
-      agentAction.target_id,
-      "MISSING_TYPED_VALUE"
-    );
-  }
-
 
   try {
-    element.focus();
-
-
-    const prototype =
-      tagName === "textarea"
-        ? HTMLTextAreaElement.prototype
-        : HTMLInputElement.prototype;
-
-
-    const descriptor =
-      Object.getOwnPropertyDescriptor(
-        prototype,
-        "value"
-      );
-
-
-    if (
-      descriptor &&
-      typeof descriptor.set === "function"
-    ) {
-      descriptor.set.call(
-        element,
-        value
-      );
-    } else {
-      element.value = value;
-    }
-
+    setNativeInputValue(element, value);
 
     element.dispatchEvent(
-      new Event(
-        "input",
-        {
-          bubbles: true,
-          composed: true
-        }
-      )
+      new Event("input", {
+        bubbles: true,
+        composed: true
+      })
     );
-
 
     element.dispatchEvent(
-      new Event(
-        "change",
-        {
-          bubbles: true,
-          composed: true
-        }
-      )
+      new Event("change", {
+        bubbles: true,
+        composed: true
+      })
     );
-
 
     return executed(
       agentAction.action,
-      agentAction.target_id
+      targetId
     );
   } catch (error) {
     return failed(
       agentAction.action,
-      agentAction.target_id,
-      error?.message ||
-        "TYPE_FAILED"
+      targetId,
+      error?.message || "TYPE_FAILED"
     );
   }
 }
 
+function executeScroll(agentAction) {
+  const amount = agentAction?.metadata?.amount;
 
-/**
- * Execute a scroll action.
- */
-function executeScroll(
-  agentAction
-) {
-  const direction =
-    (
-      agentAction?.metadata?.direction ||
-      "down"
-    ).toLowerCase();
-
-
-  const amount =
-    Number(
-      agentAction?.metadata?.amount ??
-      500
-    );
-
-
-  if (
-    !Number.isFinite(amount) ||
-    amount < 0
-  ) {
+  if (typeof amount !== "number" || !Number.isFinite(amount)) {
     return failed(
       agentAction.action,
-      agentAction.target_id,
-      "INVALID_SCROLL_AMOUNT"
+      getElementTargetId(agentAction),
+      "SCROLL_AMOUNT_INVALID"
     );
   }
-
-
-  let deltaY = amount;
-
-  if (
-    direction === "up"
-  ) {
-    deltaY = -amount;
-  }
-
-
-  if (
-    direction !== "up" &&
-    direction !== "down"
-  ) {
-    return failed(
-      agentAction.action,
-      agentAction.target_id,
-      "INVALID_SCROLL_DIRECTION"
-    );
-  }
-
 
   try {
     window.scrollBy({
-      top: deltaY,
+      top: amount,
       left: 0,
       behavior: "auto"
     });
 
     return executed(
       agentAction.action,
-      agentAction.target_id
+      getElementTargetId(agentAction)
     );
   } catch (error) {
     return failed(
       agentAction.action,
-      agentAction.target_id,
-      error?.message ||
-        "SCROLL_FAILED"
+      getElementTargetId(agentAction),
+      error?.message || "SCROLL_FAILED"
     );
   }
 }
 
+function executeNavigate(agentAction) {
+  const targetId = getElementTargetId(agentAction);
+  const url = getNavigationUrl(agentAction);
 
-/**
- * Execute a navigation action.
- *
- * IMPORTANT:
- *
- * There is deliberately no local list such as:
- *
- *   protocol === "http:" || protocol === "https:"
- *
- * here.
- *
- * securityPolicy.js is the single source of truth.
- */
-function executeNavigate(
-  agentAction
-) {
-  const url =
-    getNavigationUrl(
-      agentAction
-    );
-
-
-  if (!url) {
+  if (typeof url !== "string" || !url.trim()) {
     return failed(
       agentAction.action,
-      agentAction.target_id,
-      "MISSING_NAVIGATION_URL"
+      targetId,
+      "NAVIGATION_URL_MISSING"
     );
   }
 
-
-  if (
-    !isAllowedNavigationUrl(url)
-  ) {
+  if (!isAllowedNavigationUrl(url)) {
     return blocked(
       agentAction.action,
-      agentAction.target_id,
+      targetId,
       "UNSAFE_NAVIGATION_BLOCKED"
     );
   }
 
-
   try {
-    window.location.assign(
-      url
-    );
+    window.location.assign(url);
 
     return executed(
       agentAction.action,
-      agentAction.target_id
+      targetId
     );
   } catch (error) {
     return failed(
       agentAction.action,
-      agentAction.target_id,
-      error?.message ||
-        "NAVIGATION_FAILED"
+      targetId,
+      error?.message || "NAVIGATION_FAILED"
     );
   }
 }
 
+async function executeWait(agentAction) {
+  const targetId = getElementTargetId(agentAction);
 
-/**
- * Execute a wait action.
- *
- * The safety pipeline determines whether a wait action
- * is permitted; executor simply performs the requested delay.
- */
-async function executeWait(
-  agentAction
-) {
   const duration =
-    Number(
-      agentAction?.metadata?.duration ??
-      agentAction?.metadata?.ms ??
-      0
-    );
-
+    agentAction?.metadata?.duration ??
+    agentAction?.metadata?.ms;
 
   if (
+    typeof duration !== "number" ||
     !Number.isFinite(duration) ||
     duration < 0
   ) {
     return failed(
       agentAction.action,
-      agentAction.target_id,
-      "INVALID_WAIT_DURATION"
+      targetId,
+      "WAIT_DURATION_INVALID"
     );
   }
 
+  try {
+    await new Promise((resolve) => {
+      setTimeout(resolve, duration);
+    });
 
-  await new Promise(
-    (resolve) =>
-      setTimeout(
-        resolve,
-        duration
-      )
-  );
-
-
-  return executed(
-    agentAction.action,
-    agentAction.target_id
-  );
+    return executed(
+      agentAction.action,
+      targetId
+    );
+  } catch (error) {
+    return failed(
+      agentAction.action,
+      targetId,
+      error?.message || "WAIT_FAILED"
+    );
+  }
 }
 
-
 /**
- * Main P6 execution boundary.
+ * Executes a validated/safe P5 action.
  *
- * Safety decisions must already have been made by safetyGate.
- * This function only performs the actual browser action and
- * retains defense-in-depth validation for execution-specific
- * requirements.
+ * This function is async because the wait action genuinely waits before
+ * returning its execution result. Therefore every caller must await it.
  */
-export async function executeAction(
-  agentAction,
-  element = null
-) {
-  if (
-    !agentAction ||
-    typeof agentAction !== "object"
-  ) {
+export async function executeAction(agentAction, element = null) {
+  if (!agentAction || typeof agentAction !== "object") {
     return failed(
       null,
       null,
@@ -487,52 +292,26 @@ export async function executeAction(
     );
   }
 
-
-  const action =
-    agentAction.action;
-
-  const target_id =
-    agentAction.target_id || null;
-
-
-  switch (action) {
-
+  switch (agentAction.action) {
     case "click":
-      return executeClick(
-        agentAction,
-        element
-      );
-
+      return executeClick(agentAction, element);
 
     case "type":
-      return executeType(
-        agentAction,
-        element
-      );
-
+      return executeType(agentAction, element);
 
     case "scroll":
-      return executeScroll(
-        agentAction
-      );
-
+      return executeScroll(agentAction);
 
     case "navigate":
-      return executeNavigate(
-        agentAction
-      );
-
+      return executeNavigate(agentAction);
 
     case "wait":
-      return executeWait(
-        agentAction
-      );
-
+      return executeWait(agentAction);
 
     default:
       return failed(
-        action,
-        target_id,
+        agentAction.action,
+        getElementTargetId(agentAction),
         "UNSUPPORTED_ACTION"
       );
   }

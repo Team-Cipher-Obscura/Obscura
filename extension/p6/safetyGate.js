@@ -1,42 +1,114 @@
 import {
+  validateAgentAction
+} from "./hardening/actionValidation.js";
+
+import {
+  isAllowedProtocol
+} from "./hardening/securityPolicy.js";
+
+import {
   resolveTarget
 } from "./targetResolver.js";
+
+import {
+  isSensitiveTarget
+} from "./sensitiveRegistry.js";
 
 import {
   classifyRisk
 } from "./riskyActionRules.js";
 
 import {
-  isSensitive,
-  getSensitiveType
-} from "./sensitiveRegistry.js";
+  createExecutionResult
+} from "./executionResult.js";
 
 import {
-  validateAgentAction
-} from "./hardening/actionValidation.js";
+  logSafetyEvent
+} from "./logger.js";
 
-import {
-  logger
-} from "./hardening/logger.js";
+function validationReason(validation) {
+  if (
+    !validation ||
+    !Array.isArray(validation.errors) ||
+    validation.errors.length === 0
+  ) {
+    return "ACTION_VALIDATION_FAILED";
+  }
 
-import {
-  isAllowedProtocol
-} from "./hardening/securityPolicy.js";
+  return validation.errors.join(", ");
+}
 
+function blocked(action, reason) {
+  return createExecutionResult({
+    status: "BLOCKED",
+    action: action?.action ?? null,
+    target_id: action?.target_id ?? null,
+    reason
+  });
+}
 
-export const SUPPORTED_ACTIONS =
-  new Set([
-    "click",
-    "type",
-    "scroll",
-    "navigate",
-    "wait"
-  ]);
+function confirmationPending(action, reason) {
+  return createExecutionResult({
+    status: "CONFIRMATION_PENDING",
+    action: action?.action ?? null,
+    target_id: action?.target_id ?? null,
+    reason
+  });
+}
 
+function safe(action, element = null) {
+  return {
+    status: "SAFE",
+    action: action?.action ?? null,
+    target_id: action?.target_id ?? null,
+    element
+  };
+}
 
-export function isAllowedNavigationUrl(
-  url
-) {
+function getSensitiveType(targetId) {
+  if (!targetId) {
+    return null;
+  }
+
+  if (
+    typeof isSensitiveTarget === "function"
+  ) {
+    const result = isSensitiveTarget(targetId);
+
+    if (result === true) {
+      return "sensitive";
+    }
+
+    if (
+      result &&
+      typeof result === "object"
+    ) {
+      return (
+        result.type ??
+        result.reason ??
+        "sensitive"
+      );
+    }
+
+    if (typeof result === "string") {
+      return result;
+    }
+  }
+
+  return null;
+}
+
+function getNavigationUrl(action) {
+  return action?.metadata?.url ?? null;
+}
+
+function validateNavigationProtocol(action) {
+  if (action.action !== "navigate") {
+    return true;
+  }
+
+  const url = getNavigationUrl(action);
+
   if (
     typeof url !== "string" ||
     !url.trim()
@@ -45,443 +117,248 @@ export function isAllowedNavigationUrl(
   }
 
   try {
-
-    const parsed =
-      new URL(
-        url,
-        window.location.href
-      );
-
+    const parsed = new URL(url);
     return isAllowedProtocol(
       parsed.protocol
     );
-
   } catch {
     return false;
   }
 }
 
-
-function isValidMetadata(
-  metadata
-) {
-  return (
-    metadata !== null &&
-    typeof metadata === "object" &&
-    !Array.isArray(metadata)
-  );
-}
-
-
-function blockResult({
-  action = null,
-  target_id = null,
-  status,
-  reason,
-  element = null
-}) {
-  return {
-    decision: "BLOCK",
-    status,
-    element,
-    reason,
-    action,
-    target_id
-  };
-}
-
-
+/**
+ * Evaluate an agent action without executing it.
+ *
+ * confirmationGranted is intentionally passed only by the confirmation
+ * approval path after a fresh safety evaluation is requested.
+ */
 export function evaluateAction(
   agentAction,
   {
     confirmationGranted = false
   } = {}
 ) {
-
   const validation =
-    validateAgentAction(
-      agentAction
-    );
-
+    validateAgentAction(agentAction);
 
   if (!validation.valid) {
+    const reason =
+      validationReason(validation);
 
-    logger.warn(
-      "action_validation_blocked",
+    logSafetyEvent(
+      "ACTION_BLOCKED",
       {
-        reason:
-          validation.reason,
-
-        action:
-          logger.sanitizeAction(
-            agentAction
-          )
+        action: agentAction?.action ?? null,
+        target_id:
+          agentAction?.target_id ?? null,
+        reason
       }
     );
 
-    return blockResult({
-      action:
-        agentAction?.action ?? null,
-
-      target_id:
-        agentAction?.target_id ?? null,
-
-      status:
-        validation.reason,
-
-      reason:
-        validation.reason
-    });
-  }
-
-
-  const {
-    action,
-    target_id,
-    metadata
-  } = agentAction;
-
-
-  logger.action(
-    "safety_evaluation_started",
-    agentAction,
-    {
-      confirmationGranted:
-        Boolean(
-          confirmationGranted
-        )
-    }
-  );
-
-
-  // --------------------------------------------------
-  // Navigation policy
-  // --------------------------------------------------
-
-  if (action === "navigate") {
-
-    if (
-      target_id !== null &&
-      target_id !== undefined
-    ) {
-      logger.warn(
-        "navigation_target_id_blocked",
-        {
-          target_id
-        }
-      );
-
-      return blockResult({
-        action,
-        target_id,
-        status:
-          "INVALID_ACTION",
-        reason:
-          "Navigate actions must not include a target_id."
-      });
-    }
-
-
-    const url =
-      metadata.url;
-
-
-    if (
-      typeof url !== "string" ||
-      !url.trim()
-    ) {
-      return blockResult({
-        action,
-        target_id: null,
-        status:
-          "NAVIGATION_URL_REQUIRED",
-        reason:
-          "Navigation URL is required."
-      });
-    }
-
-
-    if (
-      !isAllowedNavigationUrl(
-        url
-      )
-    ) {
-
-      logger.warn(
-        "unsafe_navigation_blocked",
-        {
-          action,
-          protocol:
-            (() => {
-              try {
-                return new URL(
-                  url,
-                  window.location.href
-                ).protocol;
-              } catch {
-                return "invalid";
-              }
-            })()
-        }
-      );
-
-      return blockResult({
-        action,
-        target_id: null,
-        status:
-          "UNSAFE_NAVIGATION_BLOCKED",
-        reason:
-          "Navigation URL scheme is not allowed."
-      });
-    }
-  }
-
-
-  // --------------------------------------------------
-  // Targetless actions
-  // --------------------------------------------------
-
-  if (!target_id) {
-
-    if (action === "navigate") {
-
-      if (
-        confirmationGranted
-      ) {
-        logger.info(
-          "navigation_confirmation_granted"
-        );
-
-        return {
-          decision: "EXECUTE",
-          status:
-            "CONFIRMATION_GRANTED",
-          element: null,
-          reason: null
-        };
-      }
-
-
-      return {
-        decision: "CONFIRM",
-        status:
-          "CONFIRMATION_REQUIRED",
-        element: null,
-        reason:
-          "NAVIGATION_REQUIRES_CONFIRMATION"
-      };
-    }
-
-
-    if (
-      action === "scroll" ||
-      action === "wait"
-    ) {
-      return {
-        decision: "EXECUTE",
-        status:
-          "NO_TARGET_ACTION",
-        element: null,
-        reason: null
-      };
-    }
-
-
-    return blockResult({
-      action,
-      target_id: null,
-      status:
-        "INVALID_ACTION",
-      reason:
-        "TARGET_ID_REQUIRED"
-    });
-  }
-
-
-  // --------------------------------------------------
-  // Fresh target resolution
-  // --------------------------------------------------
-
-  const resolutionStartedAt =
-    performance.now();
-
-  const resolution =
-    resolveTarget(
-      target_id
+    return blocked(
+      agentAction,
+      reason
     );
-
-  const resolutionDuration =
-    performance.now() -
-    resolutionStartedAt;
-
-
-  logger.debug(
-    "target_resolution_completed",
-    {
-      target_id,
-      success:
-        Boolean(
-          resolution.success
-        ),
-      status:
-        resolution.status,
-      duration_ms:
-        Number(
-          resolutionDuration.toFixed(3)
-        )
-    }
-  );
-
-
-  if (!resolution.success) {
-    return blockResult({
-      action,
-      target_id,
-      status:
-        resolution.status,
-      reason:
-        "TARGET_COULD_NOT_BE_RESOLVED"
-    });
   }
 
-
-  // --------------------------------------------------
-  // P3 hard veto
-  // --------------------------------------------------
-
+  /*
+   * Navigation protocol enforcement is centralized through the shared
+   * security policy.
+   */
   if (
-    isSensitive(
-      target_id
-    )
+    agentAction.action === "navigate" &&
+    !validateNavigationProtocol(agentAction)
   ) {
+    const reason =
+      "UNSAFE_NAVIGATION_BLOCKED";
 
+    logSafetyEvent(
+      "ACTION_BLOCKED",
+      {
+        action: agentAction.action,
+        target_id:
+          agentAction.target_id ?? null,
+        reason
+      }
+    );
+
+    return blocked(
+      agentAction,
+      reason
+    );
+  }
+
+  /*
+   * Navigate actions do not resolve DOM targets.
+   */
+  let element = null;
+
+  if (agentAction.action !== "navigate") {
+    const resolution =
+      resolveTarget(agentAction.target_id);
+
+    if (!resolution) {
+      const reason =
+        "TARGET_NOT_FOUND";
+
+      logSafetyEvent(
+        "ACTION_BLOCKED",
+        {
+          action: agentAction.action,
+          target_id:
+            agentAction.target_id ?? null,
+          reason
+        }
+      );
+
+      return blocked(
+        agentAction,
+        reason
+      );
+    }
+
+    element =
+      resolution.element ??
+      resolution;
+
+    if (!element) {
+      const reason =
+        "TARGET_NOT_FOUND";
+
+      logSafetyEvent(
+        "ACTION_BLOCKED",
+        {
+          action: agentAction.action,
+          target_id:
+            agentAction.target_id ?? null,
+          reason
+        }
+      );
+
+      return blocked(
+        agentAction,
+        reason
+      );
+    }
+
+    /*
+     * P3 sensitive state always wins over every other classification.
+     */
     const sensitiveType =
       getSensitiveType(
-        target_id
+        agentAction.target_id
       );
 
-    logger.warn(
-      "p3_sensitive_target_blocked",
-      {
-        target_id,
-        sensitive_type:
-          sensitiveType || "unknown"
-      }
-    );
+    if (sensitiveType) {
+      const reason =
+        `P3_SENSITIVE_TARGET:${sensitiveType}`;
 
-    return blockResult({
-      action,
-      target_id,
-      status:
-        "SENSITIVE_ELEMENT_BLOCKED",
-      element:
-        resolution.element,
-      reason:
-        `P3 flagged target as sensitive: ${
-          sensitiveType || "unknown"
-        }`
-    });
+      logSafetyEvent(
+        "ACTION_BLOCKED",
+        {
+          action: agentAction.action,
+          target_id:
+            agentAction.target_id ?? null,
+          reason
+        }
+      );
+
+      return blocked(
+        agentAction,
+        reason
+      );
+    }
   }
-
-
-  // --------------------------------------------------
-  // Risk classification
-  // --------------------------------------------------
-
-  const riskStartedAt =
-    performance.now();
 
   const risk =
     classifyRisk(
       agentAction,
-      resolution.element
+      element
     );
 
-  const riskDuration =
-    performance.now() -
-    riskStartedAt;
+  /*
+   * Risk classifiers may return either a string or an object depending on
+   * the rule implementation.
+   */
+  const riskLevel =
+    typeof risk === "string"
+      ? risk
+      : risk?.level ??
+        risk?.risk ??
+        risk?.classification ??
+        "safe";
 
-
-  logger.debug(
-    "risk_classification_completed",
-    {
-      action,
-      target_id,
-      risk,
-      duration_ms:
-        Number(
-          riskDuration.toFixed(3)
-        )
-    }
-  );
-
-
-  // --------------------------------------------------
-  // Confirmation
-  // --------------------------------------------------
+  const normalizedRisk =
+    String(riskLevel).toLowerCase();
 
   if (
-    risk === "CONFIRM"
+    normalizedRisk === "block" ||
+    normalizedRisk === "blocked" ||
+    normalizedRisk === "high"
   ) {
+    const reason =
+      typeof risk === "object"
+        ? (
+            risk.reason ??
+            risk.code ??
+            "RISK_BLOCKED"
+          )
+        : "RISK_BLOCKED";
 
-    if (
-      confirmationGranted
-    ) {
-
-      logger.info(
-        "confirmation_recheck_approved",
-        {
-          action,
-          target_id
-        }
-      );
-
-      return {
-        decision: "EXECUTE",
-        status:
-          "CONFIRMATION_GRANTED",
-        element:
-          resolution.element,
-        reason: null
-      };
-    }
-
-
-    logger.info(
-      "confirmation_required",
+    logSafetyEvent(
+      "ACTION_BLOCKED",
       {
-        action,
-        target_id
+        action: agentAction.action,
+        target_id:
+          agentAction.target_id ?? null,
+        reason
+      }
+    );
+
+    return blocked(
+      agentAction,
+      reason
+    );
+  }
+
+  if (
+    (
+      normalizedRisk === "confirm" ||
+      normalizedRisk === "confirmation" ||
+      normalizedRisk === "confirmation_required"
+    ) &&
+    !confirmationGranted
+  ) {
+    const reason =
+      typeof risk === "object"
+        ? (
+            risk.reason ??
+            risk.code ??
+            "CONFIRMATION_REQUIRED"
+          )
+        : "CONFIRMATION_REQUIRED";
+
+    logSafetyEvent(
+      "CONFIRMATION_REQUIRED",
+      {
+        action: agentAction.action,
+        target_id:
+          agentAction.target_id ?? null,
+        reason
       }
     );
 
     return {
-      decision: "CONFIRM",
-      status:
-        "CONFIRMATION_REQUIRED",
-      element:
-        resolution.element,
-      reason:
-        "RISKY_ACTION"
+      ...confirmationPending(
+        agentAction,
+        reason
+      ),
+      element
     };
   }
 
-
-  logger.info(
-    "safe_action_approved",
-    {
-      action,
-      target_id
-    }
+  return safe(
+    agentAction,
+    element
   );
-
-
-  return {
-    decision: "EXECUTE",
-    status:
-      "TARGET_RESOLVED",
-    element:
-      resolution.element,
-    reason: null
-  };
 }

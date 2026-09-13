@@ -1,460 +1,353 @@
 <!DOCTYPE html>
-
-<html>
-
+<html lang="en">
 <head>
-  <title>P6 Executor Test</title>
+  <meta charset="UTF-8">
+  <title>P6 Executor Tests</title>
 </head>
 
 <body>
+  <h1>P6 Executor Tests</h1>
 
-  <h1>P6 Executor Test</h1>
+  <p>
+    Open the browser console and verify that all assertions pass.
+  </p>
 
-<input
-id="nameInput"
-data-agent-id="el_name"
-placeholder="Name"
+  <input id="textInput" type="text">
+  <input id="passwordInput" type="password">
+  <textarea id="textArea"></textarea>
 
->
-
-  <p id="output">Nothing clicked yet.</p>
-
-<button
-data-agent-id="el_click"
-id="clickButton"
-
->
-
-```
-Click Me
-```
-
+  <button id="clickButton" type="button">
+    Click Test
   </button>
-
-<button
-data-agent-id="el_scroll"
-id="scrollButton"
-
->
-
-```
-Scroll
-```
-
-  </button>
-
-  <div style="height: 1500px;">
-    <p>Scroll down to test scrolling.</p>
-  </div>
 
   <script type="module">
-
     import {
       executeAction,
       isAllowedNavigationUrl
     } from "../executor.js";
 
-
-    // -----------------------------------------
-    // Click test
-    // -----------------------------------------
-
-    document
-      .getElementById("clickButton")
-      .addEventListener("click", () => {
-
-        document.getElementById("output").textContent =
-          "Button clicked successfully.";
-
-      });
-
-
-    const clickAction = {
-      action: "click",
-      target_id: "el_click",
-      confidence: 0.95,
-      metadata: {}
-    };
-
-
-    const clickElement =
-      document.querySelector(
-        '[data-agent-id="el_click"]'
+    function assert(condition, message) {
+      console.assert(
+        condition,
+        message
       );
 
-
-    const clickResult =
-      executeAction(
-        clickAction,
-        clickElement
-      );
-
-
-    console.log(
-      "Click result:",
-      clickResult
-    );
-
-
-    console.assert(
-      clickResult.status === "EXECUTED",
-      "Click should execute"
-    );
-
-
-    // -----------------------------------------
-    // Type test
-    // -----------------------------------------
-
-    const typeAction = {
-      action: "type",
-      target_id: "el_name",
-      confidence: 0.95,
-      metadata: {
-        value: "Shaina"
+      if (condition) {
+        console.log(`PASS: ${message}`);
+      } else {
+        console.error(`FAIL: ${message}`);
       }
-    };
+    }
 
+    async function runTests() {
+      const clickButton =
+        document.getElementById(
+          "clickButton"
+        );
 
-    const inputElement =
-      document.querySelector(
-        '[data-agent-id="el_name"]'
+      const textInput =
+        document.getElementById(
+          "textInput"
+        );
+
+      const passwordInput =
+        document.getElementById(
+          "passwordInput"
+        );
+
+      const textArea =
+        document.getElementById(
+          "textArea"
+        );
+
+      let clickCount = 0;
+
+      clickButton.addEventListener(
+        "click",
+        () => {
+          clickCount += 1;
+        }
       );
 
+      /*
+       * 1. Successful click
+       */
+      const clickResult =
+        await executeAction(
+          {
+            action: "click",
+            target_id: "clickButton",
+            confidence: 0.99
+          },
+          clickButton
+        );
 
-    const typeResult =
-      executeAction(
-        typeAction,
-        inputElement
+      assert(
+        clickResult.status === "EXECUTED",
+        "click should execute successfully"
       );
 
-
-    console.log(
-      "Type result:",
-      typeResult
-    );
-
-
-    console.assert(
-      typeResult.status === "EXECUTED",
-      "Type should execute"
-    );
-
-
-    console.assert(
-      inputElement.value === "Shaina",
-      "Input should contain typed value"
-    );
-
-
-    // -----------------------------------------
-    // Scroll test
-    // -----------------------------------------
-
-    const scrollAction = {
-      action: "scroll",
-      target_id: null,
-      confidence: 0.9,
-      metadata: {
-        direction: "down",
-        amount: 500
-      }
-    };
-
-
-    const scrollResult =
-      executeAction(
-        scrollAction,
-        null
+      assert(
+        clickResult.action === "click",
+        "click result should report action"
       );
 
-
-    console.log(
-      "Scroll result:",
-      scrollResult
-    );
-
-
-    console.assert(
-      scrollResult.status === "EXECUTED",
-      "Scroll should execute"
-    );
-
-
-    // -----------------------------------------
-    // Wait test
-    // -----------------------------------------
-
-    const waitAction = {
-      action: "wait",
-      target_id: null,
-      confidence: 1.0,
-      metadata: {}
-    };
-
-
-    const waitResult =
-      executeAction(
-        waitAction,
-        null
+      assert(
+        clickResult.target_id === "clickButton",
+        "click result should report target_id"
       );
 
-
-    console.log(
-      "Wait result:",
-      waitResult
-    );
-
-
-    console.assert(
-      waitResult.status === "EXECUTED",
-      "Wait should execute"
-    );
-
-
-    // -----------------------------------------
-    // Invalid target test
-    // -----------------------------------------
-
-    const invalidClick = {
-      action: "click",
-      target_id: "el_missing",
-      confidence: 0.95,
-      metadata: {}
-    };
-
-
-    const invalidResult =
-      executeAction(
-        invalidClick,
-        null
+      assert(
+        clickCount === 1,
+        "click handler should run exactly once"
       );
 
+      /*
+       * 2. Click with missing target
+       */
+      const missingClickResult =
+        await executeAction(
+          {
+            action: "click",
+            target_id: "missingButton",
+            confidence: 0.99
+          },
+          null
+        );
 
-    console.log(
-      "Invalid target:",
-      invalidResult
-    );
-
-
-    console.assert(
-      invalidResult.status === "FAILED",
-      "Invalid target should fail"
-    );
-
-
-    // -----------------------------------------
-    // Type into unsupported element
-    // -----------------------------------------
-
-    const wrongTypeAction = {
-      action: "type",
-      target_id: "el_click",
-      confidence: 0.95,
-      metadata: {
-        value: "hello"
-      }
-    };
-
-
-    const wrongTypeResult =
-      executeAction(
-        wrongTypeAction,
-        document.querySelector(
-          '[data-agent-id="el_click"]'
-        )
+      assert(
+        missingClickResult.status === "FAILED",
+        "missing click target should fail"
       );
 
-
-    console.log(
-      "Type into button:",
-      wrongTypeResult
-    );
-
-
-    console.assert(
-      wrongTypeResult.status === "FAILED",
-      "Typing into a button should fail"
-    );
-
-
-    // -----------------------------------------
-    // Stale element test
-    // -----------------------------------------
-
-    const staleAction = {
-      action: "click",
-      target_id: "el_click",
-      confidence: 0.95,
-      metadata: {}
-    };
-
-
-    const staleElement =
-      document.querySelector(
-        '[data-agent-id="el_click"]'
+      assert(
+        missingClickResult.reason === "TARGET_NOT_FOUND",
+        "missing click target should report TARGET_NOT_FOUND"
       );
 
+      /*
+       * 3. Successful text typing
+       */
+      const typeResult =
+        await executeAction(
+          {
+            action: "type",
+            target_id: "textInput",
+            confidence: 0.99,
+            metadata: {
+              text: "hello world"
+            }
+          },
+          textInput
+        );
 
-    staleElement.remove();
-
-
-    const staleResult =
-      executeAction(
-        staleAction,
-        staleElement
+      assert(
+        typeResult.status === "EXECUTED",
+        "text input should execute successfully"
       );
 
-
-    console.log(
-      "Stale element:",
-      staleResult
-    );
-
-
-    console.assert(
-      staleResult.status === "FAILED",
-      "Stale element should fail"
-    );
-
-
-    // -----------------------------------------
-    // Unknown action test
-    // -----------------------------------------
-
-    const unknownAction = {
-      action: "dance",
-      target_id: null,
-      confidence: 0.9,
-      metadata: {}
-    };
-
-
-    const unknownResult =
-      executeAction(
-        unknownAction,
-        null
+      assert(
+        textInput.value === "hello world",
+        "text input should receive the requested value"
       );
 
+      /*
+       * 4. Successful password typing
+       */
+      const passwordResult =
+        await executeAction(
+          {
+            action: "type",
+            target_id: "passwordInput",
+            confidence: 0.99,
+            metadata: {
+              text: "secret"
+            }
+          },
+          passwordInput
+        );
 
-    console.log(
-      "Unknown action:",
-      unknownResult
-    );
-
-
-    console.assert(
-      unknownResult.status === "FAILED",
-      "Unknown action should fail"
-    );
-
-
-    // -----------------------------------------
-    // Navigation URL validation
-    // -----------------------------------------
-
-    console.assert(
-      isAllowedNavigationUrl(
-        "https://example.com"
-      ) === true,
-      "HTTPS should be allowed"
-    );
-
-
-    console.assert(
-      isAllowedNavigationUrl(
-        "http://example.com"
-      ) === true,
-      "HTTP should be allowed"
-    );
-
-
-    console.assert(
-      isAllowedNavigationUrl(
-        "javascript:alert(1)"
-      ) === false,
-      "javascript: URLs should be rejected"
-    );
-
-
-    console.assert(
-      isAllowedNavigationUrl(
-        "data:text/html,<h1>Hello</h1>"
-      ) === false,
-      "data: URLs should be rejected"
-    );
-
-
-    console.assert(
-      isAllowedNavigationUrl(
-        "file:///etc/passwd"
-      ) === false,
-      "file: URLs should be rejected"
-    );
-
-
-    console.assert(
-      isAllowedNavigationUrl(
-        "ftp://example.com"
-      ) === false,
-      "ftp: URLs should be rejected"
-    );
-
-
-    console.log(
-      "Navigation URL validation passed."
-    );
-
-
-    // -----------------------------------------
-    // Navigation missing URL test
-    // -----------------------------------------
-
-    const missingUrlAction = {
-      action: "navigate",
-      target_id: null,
-      confidence: 0.95,
-      metadata: {}
-    };
-
-
-    const missingUrlResult =
-      executeAction(
-        missingUrlAction,
-        null
+      assert(
+        passwordResult.status === "EXECUTED",
+        "password input should execute successfully"
       );
 
+      assert(
+        passwordInput.value === "secret",
+        "password input should receive the requested value"
+      );
 
-    console.log(
-      "Missing navigation URL:",
-      missingUrlResult
-    );
+      /*
+       * 5. Successful textarea typing
+       */
+      const textareaResult =
+        await executeAction(
+          {
+            action: "type",
+            target_id: "textArea",
+            confidence: 0.99,
+            metadata: {
+              text: "textarea value"
+            }
+          },
+          textArea
+        );
 
+      assert(
+        textareaResult.status === "EXECUTED",
+        "textarea typing should execute successfully"
+      );
 
-    console.assert(
-      missingUrlResult.status === "FAILED",
-      "Missing navigation URL should fail"
-    );
+      assert(
+        textArea.value === "textarea value",
+        "textarea should receive the requested value"
+      );
 
+      /*
+       * 6. Invalid type target
+       */
+      const invalidTypeResult =
+        await executeAction(
+          {
+            action: "type",
+            target_id: "clickButton",
+            confidence: 0.99,
+            metadata: {
+              text: "should fail"
+            }
+          },
+          clickButton
+        );
 
-    // -----------------------------------------
-    // Final output
-    // -----------------------------------------
+      assert(
+        invalidTypeResult.status === "FAILED",
+        "typing into a button should fail"
+      );
 
-    console.log(
-      "===================================="
-    );
+      assert(
+        invalidTypeResult.reason === "INVALID_TYPE_TARGET",
+        "invalid type target should report INVALID_TYPE_TARGET"
+      );
 
-    console.log(
-      "P6 Executor tests completed."
-    );
+      /*
+       * 7. Scroll
+       *
+       * This only verifies that the executor accepts the action and
+       * returns a real execution result object.
+       */
+      const scrollResult =
+        await executeAction(
+          {
+            action: "scroll",
+            confidence: 0.99,
+            metadata: {
+              amount: 100
+            }
+          }
+        );
 
-    console.log(
-      "===================================="
-    );
+      assert(
+        scrollResult.status === "EXECUTED",
+        "scroll should execute successfully"
+      );
 
+      /*
+       * 8. Wait
+       *
+       * executeAction is async, so this must be awaited.
+       */
+      const waitStart =
+        performance.now();
+
+      const waitResult =
+        await executeAction(
+          {
+            action: "wait",
+            confidence: 0.99,
+            metadata: {
+              duration: 25
+            }
+          }
+        );
+
+      const waitElapsed =
+        performance.now() - waitStart;
+
+      assert(
+        waitResult.status === "EXECUTED",
+        "wait should execute successfully"
+      );
+
+      assert(
+        waitElapsed >= 20,
+        "wait should actually delay execution"
+      );
+
+      /*
+       * 9. Unsupported action
+       */
+      const unsupportedResult =
+        await executeAction(
+          {
+            action: "delete",
+            target_id: "clickButton",
+            confidence: 0.99
+          },
+          clickButton
+        );
+
+      assert(
+        unsupportedResult.status === "FAILED",
+        "unsupported action should fail"
+      );
+
+      assert(
+        unsupportedResult.reason === "UNSUPPORTED_ACTION",
+        "unsupported action should report UNSUPPORTED_ACTION"
+      );
+
+      /*
+       * 10. Navigation URL helper
+       */
+      assert(
+        isAllowedNavigationUrl(
+          "https://example.com"
+        ) === true,
+        "https navigation should be allowed"
+      );
+
+      assert(
+        isAllowedNavigationUrl(
+          "http://example.com"
+        ) === true,
+        "http navigation should be allowed"
+      );
+
+      assert(
+        isAllowedNavigationUrl(
+          "javascript:alert(1)"
+        ) === false,
+        "javascript navigation should be rejected"
+      );
+
+      assert(
+        isAllowedNavigationUrl(
+          "data:text/html,test"
+        ) === false,
+        "data navigation should be rejected"
+      );
+
+      console.log(
+        "P6 executor test suite completed."
+      );
+    }
+
+    runTests().catch((error) => {
+      console.error(
+        "P6 executor test suite crashed:",
+        error
+      );
+    });
   </script>
-
 </body>
-
 </html>

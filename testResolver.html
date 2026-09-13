@@ -1,17 +1,49 @@
 <!DOCTYPE html>
 <html>
+<head>
+  <title>P6 Target Resolver Test</title>
+</head>
+
 <body>
 
-  <button data-agent-id="el_submit">Submit</button>
+  <h1>P6 Target Resolver Test</h1>
 
-  <input data-agent-id="el_name" placeholder="Name">
+  <!-- Normal target -->
+  <button data-agent-id="el_submit">
+    Submit
+  </button>
 
+  <br><br>
+
+  <!-- Normal input -->
+  <input
+    data-agent-id="el_name"
+    placeholder="Name"
+  >
+
+  <br><br>
+
+  <!-- Native disabled element -->
   <input
     data-agent-id="el_password"
     type="password"
+    placeholder="Password"
     disabled
   >
 
+  <br><br>
+
+  <!-- ARIA disabled element -->
+  <button
+    data-agent-id="el_aria_disabled"
+    aria-disabled="true"
+  >
+    ARIA Disabled
+  </button>
+
+  <br><br>
+
+  <!-- Hidden element -->
   <button
     data-agent-id="el_hidden"
     style="display: none;"
@@ -19,79 +51,283 @@
     Hidden
   </button>
 
-    <button data-agent-id="el_dynamic">
+  <br><br>
+
+  <!-- Dynamic element -->
+  <button data-agent-id="el_dynamic">
     Dynamic Button
-    </button>
+  </button>
 
-    <button
+  <!-- Covered element -->
+  <button
     data-agent-id="el_covered"
-    style="position: absolute; top: 200px; left: 100px;"
-    >
-    Covered Button
-    </button>
-
-    <div
     style="
-        position: absolute;
-        top: 200px;
-        left: 100px;
-        width: 150px;
-        height: 40px;
-        background: white;
-        z-index: 10;
+      position: absolute;
+      top: 250px;
+      left: 100px;
+      width: 150px;
+      height: 40px;
     "
-    >
+  >
+    Covered Button
+  </button>
+
+  <!-- Overlay covering the button -->
+  <div
+    style="
+      position: absolute;
+      top: 250px;
+      left: 100px;
+      width: 150px;
+      height: 40px;
+      background: white;
+      z-index: 10;
+    "
+  >
     Overlay
-    </div>
+  </div>
+
 
   <script type="module">
+
     import { resolveTarget } from "./targetResolver.js";
+
+
+    // ==================================================
+    // 1. Normal target
+    // ==================================================
+
+    const submitResult = resolveTarget("el_submit");
 
     console.log(
       "Submit:",
-      resolveTarget("el_submit")
+      submitResult
     );
+
+    console.assert(
+      submitResult.success === true &&
+      submitResult.status === "TARGET_RESOLVED",
+      "Submit should resolve successfully"
+    );
+
+
+    // ==================================================
+    // 2. Missing / unknown target
+    // ==================================================
+
+    const missingResult = resolveTarget("does_not_exist");
 
     console.log(
       "Missing:",
-      resolveTarget("does_not_exist")
+      missingResult
     );
+
+    console.assert(
+      missingResult.success === false &&
+      missingResult.status === "TARGET_NOT_FOUND",
+      "Unknown target should return TARGET_NOT_FOUND"
+    );
+
+
+    // ==================================================
+    // 3. Missing target ID
+    // ==================================================
+
+    const noIdResult = resolveTarget(null);
+
+    console.log(
+      "Missing ID:",
+      noIdResult
+    );
+
+    console.assert(
+      noIdResult.success === false &&
+      noIdResult.status === "MISSING_TARGET_ID",
+      "Missing target ID should return MISSING_TARGET_ID"
+    );
+
+
+    // ==================================================
+    // 4. Native disabled target
+    // ==================================================
+
+    const disabledResult = resolveTarget("el_password");
 
     console.log(
       "Disabled:",
-      resolveTarget("el_password")
+      disabledResult
     );
+
+    console.assert(
+      disabledResult.success === false &&
+      disabledResult.status === "TARGET_DISABLED",
+      "Disabled target should return TARGET_DISABLED"
+    );
+
+
+    // ==================================================
+    // 5. ARIA disabled target
+    // ==================================================
+
+    const ariaDisabledResult =
+      resolveTarget("el_aria_disabled");
+
+    console.log(
+      "ARIA Disabled:",
+      ariaDisabledResult
+    );
+
+    console.assert(
+      ariaDisabledResult.success === false &&
+      ariaDisabledResult.status === "TARGET_DISABLED",
+      "ARIA-disabled target should return TARGET_DISABLED"
+    );
+
+
+    // ==================================================
+    // 6. Hidden target
+    // ==================================================
+
+    const hiddenResult = resolveTarget("el_hidden");
 
     console.log(
       "Hidden:",
-      resolveTarget("el_hidden")
+      hiddenResult
     );
 
-    console.log(
-    "Before rerender:",
-    resolveTarget("el_dynamic")
+    console.assert(
+      hiddenResult.success === false &&
+      hiddenResult.status === "TARGET_NOT_VISIBLE",
+      "Hidden target should return TARGET_NOT_VISIBLE"
     );
+
+
+    // ==================================================
+    // 7. Dynamic target - initial resolution
+    // ==================================================
+
+    const dynamicBefore =
+      resolveTarget("el_dynamic");
+
+    console.log(
+      "Before replacement:",
+      dynamicBefore
+    );
+
+    console.assert(
+      dynamicBefore.success === true &&
+      dynamicBefore.status === "TARGET_RESOLVED",
+      "Dynamic target should initially resolve"
+    );
+
+
+    // ==================================================
+    // 8. Replace the old DOM node
+    // ==================================================
 
     const oldElement = document.querySelector(
-    '[data-agent-id="el_dynamic"]'
+      '[data-agent-id="el_dynamic"]'
     );
 
-    oldElement.outerHTML = `
-    <button data-agent-id="el_dynamic">
-        New Dynamic Button
-    </button>
-    `;
+    console.assert(
+      oldElement !== null,
+      "Old dynamic element should exist before replacement"
+    );
+
+    // Remove the old element
+    oldElement.remove();
+
+
+    // Create a completely NEW DOM node
+    const replacement = document.createElement("button");
+
+    replacement.textContent =
+      "Replacement Dynamic Button";
+
+    replacement.setAttribute(
+      "data-agent-id",
+      "el_dynamic_new"
+    );
+
+    replacement.style.position = "absolute";
+    replacement.style.top = "500px";
+    replacement.style.left = "100px";
+
+    document.body.appendChild(replacement);
+
+    // ==================================================
+    // 9. Old target ID must now be stale
+    // ==================================================
+
+    const staleResult =
+      resolveTarget("el_dynamic");
 
     console.log(
-    "After rerender:",
-    resolveTarget("el_dynamic")
+      "Old target after replacement:",
+      staleResult
+    );
+
+    console.assert(
+      staleResult.success === false &&
+      staleResult.status === "TARGET_NOT_FOUND",
+      "Old target ID should become stale after replacement"
+    );
+
+
+    // ==================================================
+    // 10. New target ID should resolve
+    // ==================================================
+
+    const newResult =
+      resolveTarget("el_dynamic_new");
+
+    console.log(
+      "New target:",
+      newResult
+    );
+
+    console.assert(
+      newResult.success === true &&
+      newResult.status === "TARGET_RESOLVED",
+      "New target ID should resolve successfully"
+    );
+
+
+    // ==================================================
+    // 11. Covered target
+    // ==================================================
+
+    const coveredResult =
+      resolveTarget("el_covered");
+
+    console.log(
+      "Covered:",
+      coveredResult
+    );
+
+    console.assert(
+      coveredResult.success === false &&
+      coveredResult.status === "TARGET_COVERED",
+      "Covered target should return TARGET_COVERED"
+    );
+
+
+    // ==================================================
+    // TEST COMPLETE
+    // ==================================================
+
+    console.log(
+      "===================================="
     );
 
     console.log(
-    "Covered:",
-    resolveTarget("el_covered")
+      "P6 Target Resolver tests completed."
     );
-    </script>
+
+    console.log(
+      "====================================");
+
+  </script>
 
 </body>
 </html>

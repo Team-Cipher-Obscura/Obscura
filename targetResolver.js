@@ -1,5 +1,19 @@
+/**
+ * P6 Target Resolver
+ *
+ * Resolves P5's target_id into the current live DOM element.
+ *
+ * P2 contract:
+ * - Each live DOM element receives a stable data-agent-id.
+ * - The same DOM node keeps the same ID across captures.
+ * - A newly created/re-rendered DOM node receives a new ID.
+ *
+ * P6 validates the element again immediately before execution.
+ */
+
 export function resolveTarget(targetId) {
-  // 1. No/invalid target ID provided
+
+  // 1. No valid target ID provided
   if (!targetId || typeof targetId !== "string") {
     return {
       success: false,
@@ -8,12 +22,15 @@ export function resolveTarget(targetId) {
     };
   }
 
-  // 2. Find the element using P2's ID scheme
+  // 2. Resolve using P2's data-agent-id scheme
   const element = document.querySelector(
     `[data-agent-id="${CSS.escape(targetId)}"]`
   );
 
-  // 3. Element no longer exists
+  // 3. Target no longer exists in the current DOM
+  //
+  // This also covers stale IDs when an old DOM node was removed
+  // and replaced by a new node with a different target_id.
   if (!element) {
     return {
       success: false,
@@ -22,23 +39,14 @@ export function resolveTarget(targetId) {
     };
   }
 
-  // 4. Check whether it is still attached to the DOM
-  if (!element.isConnected) {
-    return {
-      success: false,
-      status: "TARGET_DETACHED",
-      element: null
-    };
-  }
-
-  // 5. Check visibility
+  // 4. Check visibility
   const style = window.getComputedStyle(element);
   const rect = element.getBoundingClientRect();
 
   const isVisible =
     style.display !== "none" &&
     style.visibility !== "hidden" &&
-    style.opacity !== "0" &&
+    parseFloat(style.opacity) > 0 &&
     rect.width > 0 &&
     rect.height > 0;
 
@@ -50,8 +58,16 @@ export function resolveTarget(targetId) {
     };
   }
 
-  // 6. Check whether the element is disabled
-  if (element.disabled === true) {
+  // 5. Check whether the target is disabled
+  //
+  // Native disabled applies to form controls.
+  // aria-disabled covers custom interactive elements that
+  // communicate their disabled state through ARIA.
+  const isDisabled =
+    element.disabled === true ||
+    element.getAttribute("aria-disabled") === "true";
+
+  if (isDisabled) {
     return {
       success: false,
       status: "TARGET_DISABLED",
@@ -59,24 +75,16 @@ export function resolveTarget(targetId) {
     };
   }
 
-  // 7. Check whether another element is covering the target
-    if (isCovered(element)) {
+  // 6. Check whether another element is covering the target
+  if (isCovered(element)) {
     return {
-        success: false,
-        status: "TARGET_COVERED",
-        element: null
+      success: false,
+      status: "TARGET_COVERED",
+      element: null
     };
-    }
+  }
 
-    if (element.getAttribute("aria-disabled") === "true") {
-    return {
-        success: false,
-        status: "TARGET_DISABLED",
-        element: null
-    };
-    }
-
-  // 8. Everything looks usable
+  // 7. Target is valid and currently usable
   return {
     success: true,
     status: "TARGET_RESOLVED",
@@ -84,7 +92,13 @@ export function resolveTarget(targetId) {
   };
 }
 
+
+/**
+ * Checks whether the center of the target is covered
+ * by another element.
+ */
 function isCovered(element) {
+
   const rect = element.getBoundingClientRect();
 
   const centerX = rect.left + rect.width / 2;
@@ -101,3 +115,11 @@ function isCovered(element) {
 
   return !element.contains(topElement);
 }
+
+// NOTE:
+// P2's MutationObserver-based continuous ID assignment is not
+// implemented yet. Therefore, newly created elements may not
+// have a data-agent-id until the next perception/capture cycle.
+//
+// P6 intentionally does NOT generate fallback IDs.
+// If an element has no target_id, resolution fails safely.

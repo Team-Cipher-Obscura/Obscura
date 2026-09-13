@@ -1,32 +1,40 @@
 // content.js
 // P1 → P2 → P3 integration bridge.
 //
-// Responsibilities:
-//   - Receive P1_CAPTURE_CYCLE from P1
-//   - Run the existing P2 perception pipeline
-//   - Pass P2's elements + P1 screenshot to P3
-//   - Return P3's outputs to P1
+// P1 sends:
+//   P1_CAPTURE_CYCLE
+//
+// P2 performs:
+//   - DOM extraction
+//   - screenshot decoding
+//   - vision inference
+//   - DOM + vision fusion
+//
+// P3 then receives:
+//   - P2 elements
+//   - original P1 screenshot
+//   - P1-authoritative cycle_id
+//
+// P3 returns:
+//   - toP4
+//   - toP1
+//   - toP6
 //
 // P1 owns cycle_id.
-// This file never generates or modifies cycle_id.
+// This file never creates or replaces it.
 
-import { processFrame } from "./src/index.js";
+import {
+  processFrame
+} from "./src/index.js";
 
 
-// --------------------------------------------------
+// ==================================================
 // P2 perception
-//
-// P2 is loaded by manifest.json before content.js:
-//
-//   stableIds.js
-//   extractElements.js
-//   p2-vision.js
-//   domVisionFusion.js
-//
-// Therefore the existing P2 globals are used here.
-// --------------------------------------------------
+// ==================================================
 
-async function runP2Perception(p1Payload) {
+async function runP2Perception(
+  p1Payload
+) {
 
   const {
     cycle_id,
@@ -36,22 +44,28 @@ async function runP2Perception(p1Payload) {
 
 
   // ----------------------------------------------
-  // Validate P1 payload
+  // Validate P1 input
   // ----------------------------------------------
 
   if (!cycle_id) {
-    throw new Error("Missing cycle_id.");
+
+    throw new Error(
+      "Missing cycle_id."
+    );
   }
 
 
   if (!screenshot) {
-    throw new Error("Missing screenshot.");
+
+    throw new Error(
+      "Missing screenshot."
+    );
   }
 
 
-  // ----------------------------------------------
-  // 1. DOM extraction
-  // ----------------------------------------------
+  // ==================================================
+  // STEP 1 — DOM extraction
+  // ==================================================
 
   const domElements =
     P2DOM.extractAllElements();
@@ -61,9 +75,9 @@ async function runP2Perception(p1Payload) {
     Date.now();
 
 
-  // ----------------------------------------------
-  // 2. Decode P1 screenshot
-  // ----------------------------------------------
+  // ==================================================
+  // STEP 2 — Decode screenshot
+  // ==================================================
 
   const image =
     await loadScreenshotImage(
@@ -71,28 +85,15 @@ async function runP2Perception(p1Payload) {
     );
 
 
-  console.log(
-    "[P2] Screenshot decoded:",
-    image.width,
-    "x",
-    image.height
-  );
-
-
-  // ----------------------------------------------
-  // 3. Local YOLO vision
-  // ----------------------------------------------
+  // ==================================================
+  // STEP 3 — Vision inference
+  // ==================================================
 
   let session =
     P2Vision.getSession();
 
 
   if (!session) {
-
-    console.log(
-      "[P2 Vision] Model not ready. Loading..."
-    );
-
 
     session =
       await P2Vision.loadVisionModel();
@@ -105,15 +106,9 @@ async function runP2Perception(p1Payload) {
     );
 
 
-  console.log(
-    "[P2 Vision] Detections:",
-    visionDetections
-  );
-
-
-  // ----------------------------------------------
-  // 4. DOM + Vision fusion
-  // ----------------------------------------------
+  // ==================================================
+  // STEP 4 — DOM + Vision fusion
+  // ==================================================
 
   const fused =
     P2Fusion.fuseDomAndVision(
@@ -122,13 +117,13 @@ async function runP2Perception(p1Payload) {
     );
 
 
-  // ----------------------------------------------
-  // 5. Return P2 perception payload
-  // ----------------------------------------------
+  // ==================================================
+  // STEP 5 — Return P2 result
+  // ==================================================
 
   return {
 
-    // P1-generated ID preserved exactly.
+    // P1-owned ID.
     cycle_id,
 
     dom_extracted_at,
@@ -144,48 +139,62 @@ async function runP2Perception(p1Payload) {
 }
 
 
-// --------------------------------------------------
+// ==================================================
 // Decode P1 screenshot
-// --------------------------------------------------
+// ==================================================
 
-function loadScreenshotImage(dataUrl) {
+function loadScreenshotImage(
+  dataUrl
+) {
 
-  return new Promise((resolve, reject) => {
+  return new Promise(
+    (resolve, reject) => {
 
-    const image =
-      new Image();
-
-
-    image.onload = () => {
-      resolve(image);
-    };
+      const image =
+        new Image();
 
 
-    image.onerror = () => {
+      image.onload =
+        () => {
 
-      reject(
-        new Error(
-          "Failed to decode P1 screenshot."
-        )
-      );
-    };
+          resolve(
+            image
+          );
+        };
 
 
-    image.src = dataUrl;
-  });
+      image.onerror =
+        () => {
+
+          reject(
+            new Error(
+              "Failed to decode P1 screenshot."
+            )
+          );
+        };
+
+
+      image.src =
+        dataUrl;
+    }
+  );
 }
 
 
-// --------------------------------------------------
-// Handle messages from P1
-// --------------------------------------------------
+// ==================================================
+// Runtime message listener
+// ==================================================
 
 chrome.runtime.onMessage.addListener(
-  (message, sender, sendResponse) => {
-
+  (
+    message,
+    sender,
+    sendResponse
+  ) => {
 
     // ----------------------------------------------
-    // P1 asks for current viewport
+    // P1 → content.js
+    // Get current viewport.
     // ----------------------------------------------
 
     if (
@@ -206,15 +215,15 @@ chrome.runtime.onMessage.addListener(
 
         innerHeight:
           window.innerHeight
-
       });
+
 
       return false;
     }
 
 
     // ----------------------------------------------
-    // Ignore unrelated messages
+    // Ignore everything except P1 capture cycles.
     // ----------------------------------------------
 
     if (
@@ -230,11 +239,13 @@ chrome.runtime.onMessage.addListener(
       message.payload;
 
 
-    // ----------------------------------------------
-    // Validate cycle_id
-    // ----------------------------------------------
+    // ==================================================
+    // Validate P1 payload
+    // ==================================================
 
-    if (!p1Payload?.cycle_id) {
+    if (
+      !p1Payload?.cycle_id
+    ) {
 
       console.error(
         "[Obscura] P1 payload missing cycle_id."
@@ -243,7 +254,8 @@ chrome.runtime.onMessage.addListener(
 
       sendResponse({
 
-        valid: false,
+        valid:
+          false,
 
         error:
           "Missing cycle_id"
@@ -254,11 +266,9 @@ chrome.runtime.onMessage.addListener(
     }
 
 
-    // ----------------------------------------------
-    // Validate screenshot
-    // ----------------------------------------------
-
-    if (!p1Payload?.screenshot) {
+    if (
+      !p1Payload?.screenshot
+    ) {
 
       console.error(
         "[Obscura] P1 payload missing screenshot."
@@ -267,7 +277,8 @@ chrome.runtime.onMessage.addListener(
 
       sendResponse({
 
-        valid: false,
+        valid:
+          false,
 
         error:
           "Missing screenshot"
@@ -284,19 +295,20 @@ chrome.runtime.onMessage.addListener(
     );
 
 
-    // ----------------------------------------------
+    // ==================================================
     // P2 → P3
     //
-    // Processing is asynchronous, so the
-    // message channel stays open.
-    // ----------------------------------------------
+    // This work is asynchronous, so the listener
+    // returns true below to keep the message channel
+    // alive until sendResponse() executes.
+    // ==================================================
 
     (async () => {
 
       try {
 
         // ==========================================
-        // STEP 1 — P2
+        // STEP 1 — P2 perception
         // ==========================================
 
         const p2Result =
@@ -312,27 +324,36 @@ chrome.runtime.onMessage.addListener(
 
 
         // ==========================================
-        // STEP 2 — P3
+        // Verify P2 did not replace P1's ID.
         // ==========================================
-        //
-        // P3's processFrame() expects:
-        //
-        //   frame_id
-        //   elements
-        //   screenshot
-        //
-        // P1's cycle_id is passed through as frame_id.
+
+        if (
+          p2Result.cycle_id !==
+          p1Payload.cycle_id
+        ) {
+
+          throw new Error(
+            "P2 changed the P1 cycle_id."
+          );
+        }
+
+
+        // ==========================================
+        // STEP 2 — P2 → P3
         // ==========================================
 
         const p3Result =
           await processFrame({
 
+            // P1's cycle_id remains authoritative.
             frame_id:
-              p2Result.cycle_id,
+              p1Payload.cycle_id,
 
+            // P2 elements.
             elements:
               p2Result.elements,
 
+            // Original screenshot captured by P1.
             screenshot:
               p1Payload.screenshot
           });
@@ -345,31 +366,50 @@ chrome.runtime.onMessage.addListener(
 
 
         // ==========================================
-        // STEP 3 — Return P2 + P3 results to P1
+        // Verify P3 did not replace P1's ID.
+        // ==========================================
+
+        if (
+          p3Result?.toP4?.frame_id &&
+          p3Result.toP4.frame_id !==
+            p1Payload.cycle_id
+        ) {
+
+          throw new Error(
+            "P3 returned a frame_id different from P1 cycle_id."
+          );
+        }
+
+
+        // ==========================================
+        // STEP 3 — Return P3 outputs to P1
         // ==========================================
 
         sendResponse({
 
-          valid: true,
+          valid:
+            true,
 
-          // Preserve P1's authoritative ID.
           cycle_id:
             p1Payload.cycle_id,
 
+          // P2 result, retained for debugging/use
+          // by the P1 pipeline.
           perception:
             p2Result,
 
-          toP1:
-            p3Result.toP1,
-
+          // P3 → P4
           toP4:
-            p3Result.toP4,
+            p3Result?.toP4,
 
+          // P3 → P1 privacy counters.
+          toP1:
+            p3Result?.toP1,
+
+          // P3 → P6 sensitive map.
           toP6:
-            p3Result.toP6
-
+            p3Result?.toP6
         });
-
 
       } catch (error) {
 
@@ -381,15 +421,17 @@ chrome.runtime.onMessage.addListener(
 
         sendResponse({
 
-          valid: false,
+          valid:
+            false,
 
+          // Even on failure, preserve
+          // P1's authoritative ID.
           cycle_id:
             p1Payload.cycle_id,
 
           error:
             error?.message ||
             "P2/P3 processing failed."
-
         });
       }
 
@@ -397,35 +439,11 @@ chrome.runtime.onMessage.addListener(
 
 
     // ----------------------------------------------
-    // Keep Chrome message channel open.
+    // IMPORTANT:
+    // Keep the Chrome message channel open
+    // for the asynchronous P2/P3 work.
     // ----------------------------------------------
 
     return true;
   }
 );
-
-
-// --------------------------------------------------
-// Preload P2 YOLO model
-// --------------------------------------------------
-
-(async () => {
-
-  try {
-
-    await P2Vision.loadVisionModel();
-
-
-    console.log(
-      "[P2 Vision] Model initialization complete."
-    );
-
-  } catch (error) {
-
-    console.error(
-      "[P2 Vision] Model load failed:",
-      error
-    );
-  }
-
-})();

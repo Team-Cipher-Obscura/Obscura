@@ -1,156 +1,328 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Obscura</title>
-
-  <style>
-    body {
-      width: 280px;
-      font-family: system-ui, sans-serif;
-      padding: 12px;
-      margin: 0;
-    }
-
-    h1 {
-      font-size: 15px;
-      margin: 0 0 10px;
-    }
-
-    input[type="text"] {
-      width: 100%;
-      box-sizing: border-box;
-      padding: 6px;
-      margin-bottom: 8px;
-      font-size: 13px;
-    }
-
-    button {
-      width: 100%;
-      padding: 8px;
-      font-size: 13px;
-      cursor: pointer;
-      margin-bottom: 8px;
-    }
-
-    #stopBtn {
-      margin-bottom: 12px;
-    }
-
-    #status {
-      font-size: 12px;
-      line-height: 1.5;
-      background: #f4f4f4;
-      padding: 8px;
-      border-radius: 6px;
-      white-space: pre-wrap;
-    }
-
-    .counters {
-      font-size: 12px;
-      margin-top: 8px;
-    }
-
-    .counters div {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 4px;
-    }
-
-    .preview-section {
-      margin-top: 12px;
-      font-size: 12px;
-    }
-
-    .preview-section strong {
-      display: block;
-      margin-bottom: 5px;
-    }
-
-    .preview {
-      width: 100%;
-      max-height: 180px;
-      object-fit: contain;
-      display: block;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-      background: #fafafa;
-    }
-  </style>
+  <link rel="stylesheet" href="popup.css" />
 </head>
 
 <body>
 
-  <h1>Obscura</h1>
+  <main class="app">
 
-  <input
-    id="taskInput"
-    type="text"
-    placeholder="e.g. Find Mumbai flight"
-  />
+    <!-- ==========================================
+         HEADER
+         ========================================== -->
 
-  <button id="startBtn">
-    Start capture cycle
-  </button>
+    <header class="header">
 
-  <button id="stopBtn">
-    Stop capture cycle
-  </button>
+      <div class="brand">
 
-  <div id="status">
-    Idle. Enter a task and click start.
-  </div>
+        <img
+          class="brand-logo"
+          src="logo.svg"
+          alt="Obscura"
+        />
 
-  <!-- Privacy counters -->
+        <div class="brand-copy">
+          <div class="brand-name">
+            Obscura
+          </div>
 
-  <div class="counters">
+          <div class="brand-subtitle">
+            Privacy-preserving browser agent
+          </div>
+        </div>
 
-    <div>
-      <span>PII detected</span>
-      <span id="piiCount">0</span>
-    </div>
+      </div>
 
-    <div>
-      <span>Redacted</span>
-      <span id="redactedCount">0</span>
-    </div>
+      <span
+        id="liveDot"
+        class="live-dot"
+        title="Idle"
+      ></span>
 
-    <div>
-      <span>Sent to AI</span>
-      <span id="sentCount">0</span>
-    </div>
-
-  </div>
+    </header>
 
 
-  <!-- Original screenshot -->
+    <!-- ==========================================
+         TASK
+         ========================================== -->
 
-  <div class="preview-section">
+    <section class="task-section">
 
-    <strong>Original screenshot</strong>
+      <label for="taskInput">
+        Task
+      </label>
 
-    <img
-      id="originalPreview"
-      class="preview"
-      alt="Original screenshot"
-    />
+      <input
+        id="taskInput"
+        type="text"
+        autocomplete="off"
+        placeholder="e.g. Find Mumbai flight"
+      />
 
-  </div>
+      <div class="button-row">
+
+        <button
+          id="startBtn"
+          class="primary-btn"
+          type="button"
+        >
+          Start capture cycle
+        </button>
+
+        <button
+          id="stopBtn"
+          class="secondary-btn"
+          type="button"
+          disabled
+        >
+          Stop
+        </button>
+
+      </div>
+
+    </section>
 
 
-  <!-- Redacted screenshot -->
+    <!-- ==========================================
+         STATUS
+         ========================================== -->
 
-  <div class="preview-section">
+    <section class="status-row">
 
-    <strong>Redacted screenshot</strong>
+      <span class="status-title">
+        Status
+      </span>
 
-    <img
-      id="redactedPreview"
-      class="preview"
-      alt="Redacted screenshot"
-    />
+      <span
+        id="status"
+        class="status-text"
+      >
+        Idle. Enter a task and click start.
+      </span>
 
-  </div>
+    </section>
+
+
+    <!-- ==========================================
+         PRIVACY METRICS
+         ========================================== -->
+
+    <section
+      class="metrics"
+      aria-label="Privacy counters"
+    >
+
+      <div class="metric">
+
+        <span>
+          PII detected
+        </span>
+
+        <strong id="piiCount">
+          0
+        </strong>
+
+      </div>
+
+
+      <div class="metric">
+
+        <span>
+          Redacted
+        </span>
+
+        <strong id="redactedCount">
+          0
+        </strong>
+
+      </div>
+
+
+      <div class="metric">
+
+        <span>
+          Sent to AI
+        </span>
+
+        <strong id="sentCount">
+          0
+        </strong>
+
+      </div>
+
+    </section>
+
+
+    <!-- ==========================================
+         P6 CONFIRMATION
+         ========================================== -->
+
+    <section
+      id="confirmation"
+      class="confirmation"
+      hidden
+    >
+
+      <div class="confirmation-header">
+
+        <span class="confirmation-icon">
+          !
+        </span>
+
+        <div>
+
+          <div class="confirmation-title">
+            Confirmation required
+          </div>
+
+          <div class="confirmation-subtitle">
+            Obscura needs your approval before continuing.
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <div
+        id="confirmationText"
+        class="confirmation-text"
+      >
+        An action requires your confirmation.
+      </div>
+
+
+      <div class="confirmation-actions">
+
+        <button
+          id="denyBtn"
+          class="secondary-btn"
+          type="button"
+        >
+          Deny
+        </button>
+
+        <button
+          id="approveBtn"
+          class="primary-btn"
+          type="button"
+        >
+          Approve
+        </button>
+
+      </div>
+
+    </section>
+
+
+    <!-- ==========================================
+         CAPTURE PREVIEW
+         ========================================== -->
+
+    <section class="preview-section">
+
+      <div class="section-heading">
+
+        <div>
+
+          <h2>
+            Capture preview
+          </h2>
+
+          <p>
+            Latest frame before and after redaction
+          </p>
+
+        </div>
+
+        <span class="privacy-badge">
+          Protected
+        </span>
+
+      </div>
+
+
+      <div class="preview-grid">
+
+        <!-- Original -->
+
+        <div class="preview-panel">
+
+          <div class="preview-label">
+            Original
+          </div>
+
+          <div class="image-wrap">
+
+            <img
+              id="originalPreview"
+              alt="Original screenshot"
+            />
+
+            <div
+              id="originalPlaceholder"
+              class="image-placeholder"
+            >
+              No capture yet
+            </div>
+
+          </div>
+
+        </div>
+
+
+        <!-- Redacted -->
+
+        <div class="preview-panel">
+
+          <div class="preview-label">
+            Redacted
+          </div>
+
+          <div class="image-wrap">
+
+            <img
+              id="redactedPreview"
+              alt="Redacted screenshot"
+            />
+
+            <div
+              id="redactedPlaceholder"
+              class="image-placeholder"
+            >
+              No redacted frame yet
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- ==========================================
+         FOOTER
+         ========================================== -->
+
+    <footer class="footer">
+
+      <span>
+        Obscura
+      </span>
+
+      <span>
+        P1 capture pipeline
+      </span>
+
+    </footer>
+
+  </main>
 
 
   <script src="popup.js"></script>

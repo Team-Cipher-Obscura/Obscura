@@ -2,6 +2,7 @@
 <html>
 
 <head>
+  <meta charset="UTF-8">
   <title>P6 Safety Gate Test</title>
 </head>
 
@@ -24,11 +25,11 @@
 
   <button data-agent-id="el_wireless">
     Wireless Settings
-    </button>
+  </button>
 
-    <button data-agent-id="el_transfer">
+  <button data-agent-id="el_transfer">
     Wire Transfer
-    </button>
+  </button>
 
   <input
     data-agent-id="el_new_password"
@@ -44,8 +45,11 @@
 
   <script type="module">
 
-    import { evaluateAction }
-      from "../safetyGate.js";
+    import {
+      evaluateAction,
+      isAllowedNavigationUrl,
+      SUPPORTED_ACTIONS
+    } from "../safetyGate.js";
 
     import {
       update
@@ -60,13 +64,104 @@
     } from "../mock/p5Actions.js";
 
 
-    // Load P3's sensitive-element information
+    // ==================================================
+    // Test helpers
+    // ==================================================
+
+    let passed = 0;
+    let failed = 0;
+
+
+    function assert(
+      condition,
+      message
+    ) {
+
+      if (condition) {
+        passed++;
+
+        console.log(
+          `PASS: ${message}`
+        );
+
+      } else {
+        failed++;
+
+        console.error(
+          `FAIL: ${message}`
+        );
+      }
+
+      console.assert(
+        condition,
+        message
+      );
+    }
+
+
+    function assertEqual(
+      actual,
+      expected,
+      message
+    ) {
+
+      assert(
+        actual === expected,
+        `${message} | expected=${expected}, actual=${actual}`
+      );
+    }
+
+
+    // ==================================================
+    // Load P3 sensitive-element information
+    // ==================================================
+
     update(mockP3Payload);
 
 
-    // -----------------------------------------------
-    // 1. Safe click
-    // -----------------------------------------------
+    // ==================================================
+    // 1. Supported action allowlist
+    // ==================================================
+
+    assert(
+      SUPPORTED_ACTIONS.has("click"),
+      "click is supported"
+    );
+
+    assert(
+      SUPPORTED_ACTIONS.has("type"),
+      "type is supported"
+    );
+
+    assert(
+      SUPPORTED_ACTIONS.has("scroll"),
+      "scroll is supported"
+    );
+
+    assert(
+      SUPPORTED_ACTIONS.has("navigate"),
+      "navigate is supported"
+    );
+
+    assert(
+      SUPPORTED_ACTIONS.has("wait"),
+      "wait is supported"
+    );
+
+    assert(
+      !SUPPORTED_ACTIONS.has("delete"),
+      "delete is not a literal action type"
+    );
+
+    assert(
+      !SUPPORTED_ACTIONS.has("purchase"),
+      "purchase is not a literal action type"
+    );
+
+
+    // ==================================================
+    // 2. Safe click
+    // ==================================================
 
     const safe =
       evaluateAction(
@@ -78,15 +173,16 @@
       safe
     );
 
-    console.assert(
-      safe.decision === "EXECUTE",
+    assertEqual(
+      safe.decision,
+      "EXECUTE",
       "Safe click should EXECUTE"
     );
 
 
-    // -----------------------------------------------
-    // 2. Submit button
-    // -----------------------------------------------
+    // ==================================================
+    // 3. Risky submit
+    // ==================================================
 
     const submit =
       evaluateAction(
@@ -98,15 +194,22 @@
       submit
     );
 
-    console.assert(
-      submit.decision === "CONFIRM",
+    assertEqual(
+      submit.decision,
+      "CONFIRM",
       "Submit should require confirmation"
     );
 
+    assertEqual(
+      submit.reason,
+      "RISKY_ACTION",
+      "Submit should have RISKY_ACTION reason"
+    );
 
-    // -----------------------------------------------
-    // 3. Delete button
-    // -----------------------------------------------
+
+    // ==================================================
+    // 4. Risky delete
+    // ==================================================
 
     const deleteAction =
       evaluateAction(
@@ -118,15 +221,16 @@
       deleteAction
     );
 
-    console.assert(
-      deleteAction.decision === "CONFIRM",
+    assertEqual(
+      deleteAction.decision,
+      "CONFIRM",
       "Delete should require confirmation"
     );
 
 
-    // -----------------------------------------------
-    // 4. Password typing
-    // -----------------------------------------------
+    // ==================================================
+    // 5. Password typing
+    // ==================================================
 
     const password =
       evaluateAction(
@@ -138,37 +242,53 @@
       password
     );
 
-    console.assert(
-      password.decision === "CONFIRM",
+    assertEqual(
+      password.decision,
+      "CONFIRM",
       "Password typing should require confirmation"
     );
 
 
+    // ==================================================
+    // 6. Safe navigation
+    // ==================================================
+
     const navigationAction = {
-    action: "navigate",
-    target_id: null,
-    confidence: 0.95,
-    metadata: {
+      action: "navigate",
+      target_id: null,
+      confidence: 0.95,
+      metadata: {
         url: "https://example.com"
-    }
+      }
     };
 
-    //Navigation
+
     const navigation =
-    evaluateAction(navigationAction);
+      evaluateAction(
+        navigationAction
+      );
 
     console.log(
-    "Navigation:",
-    navigation
+      "Navigation:",
+      navigation
     );
 
-    console.assert(
-    navigation.decision === "CONFIRM",
-    "Navigation should require confirmation"
+    assertEqual(
+      navigation.decision,
+      "CONFIRM",
+      "Safe HTTP(S) navigation should require confirmation"
     );
-    // -----------------------------------------------
-    // 5. P3 hard veto
-    // -----------------------------------------------
+
+    assertEqual(
+      navigation.status,
+      "CONFIRMATION_REQUIRED",
+      "Safe navigation should enter confirmation state"
+    );
+
+
+    // ==================================================
+    // 7. P3 hard veto
+    // ==================================================
 
     const sensitive =
       evaluateAction(
@@ -180,151 +300,623 @@
       sensitive
     );
 
-    console.assert(
-      sensitive.decision === "BLOCK",
+    assertEqual(
+      sensitive.decision,
+      "BLOCK",
       "P3-sensitive target MUST be blocked"
     );
 
+    assertEqual(
+      sensitive.status,
+      "SENSITIVE_ELEMENT_BLOCKED",
+      "P3-sensitive target should have explicit block status"
+    );
+
+
+    // ==================================================
+    // 8. Wireless false-positive check
+    // ==================================================
+
     const wirelessAction = {
-    action: "click",
-    target_id: "el_wireless",
-    confidence: 0.9,
-    metadata: {}
+      action: "click",
+      target_id: "el_wireless",
+      confidence: 0.9,
+      metadata: {}
     };
+
 
     const transferAction = {
-    action: "click",
-    target_id: "el_transfer",
-    confidence: 0.9,
-    metadata: {}
+      action: "click",
+      target_id: "el_transfer",
+      confidence: 0.9,
+      metadata: {}
     };
+
 
     const wirelessResult =
-    evaluateAction(wirelessAction);
+      evaluateAction(
+        wirelessAction
+      );
 
     const transferResult =
-    evaluateAction(transferAction);
+      evaluateAction(
+        transferAction
+      );
+
 
     console.log(
-    "Wireless Settings:",
-    wirelessResult
+      "Wireless Settings:",
+      wirelessResult
     );
 
     console.log(
-    "Wire Transfer:",
-    transferResult
+      "Wire Transfer:",
+      transferResult
     );
 
-    console.assert(
-    wirelessResult.decision === "EXECUTE",
-    "Wireless Settings should NOT be considered risky"
+
+    assertEqual(
+      wirelessResult.decision,
+      "EXECUTE",
+      "Wireless Settings should NOT be considered risky"
     );
 
-    console.assert(
-    transferResult.decision === "CONFIRM",
-    "Wire Transfer should require confirmation"
+    assertEqual(
+      transferResult.decision,
+      "CONFIRM",
+      "Wire Transfer should require confirmation"
     );
+
+
+    // ==================================================
+    // 9. Click without target
+    // ==================================================
 
     const invalidClick = {
-    action: "click",
-    target_id: null,
-    confidence: 0.99,
-    metadata: {}
+      action: "click",
+      target_id: null,
+      confidence: 0.99,
+      metadata: {}
     };
 
-    const invalidType = {
-    action: "type",
-    target_id: null,
-    confidence: 0.99,
-    metadata: {
-        value: "hello"
-    }
-    };
-
-    const scrollAction = {
-    action: "scroll",
-    target_id: null,
-    confidence: 0.95,
-    metadata: {
-        direction: "down",
-        amount: 500
-    }
-    };
-
-    const waitAction = {
-    action: "wait",
-    target_id: null,
-    confidence: 0.95,
-    metadata: {}
-    };
 
     const invalidClickResult =
-    evaluateAction(invalidClick);
+      evaluateAction(
+        invalidClick
+      );
+
+
+    console.log(
+      "Click without target:",
+      invalidClickResult
+    );
+
+
+    assertEqual(
+      invalidClickResult.decision,
+      "BLOCK",
+      "Click without target should BLOCK"
+    );
+
+    assertEqual(
+      invalidClickResult.reason,
+      "TARGET_ID_REQUIRED",
+      "Click without target should explain the failure"
+    );
+
+
+    // ==================================================
+    // 10. Type without target
+    // ==================================================
+
+    const invalidType = {
+      action: "type",
+      target_id: null,
+      confidence: 0.99,
+      metadata: {
+        value: "hello"
+      }
+    };
+
 
     const invalidTypeResult =
-    evaluateAction(invalidType);
+      evaluateAction(
+        invalidType
+      );
+
+
+    console.log(
+      "Type without target:",
+      invalidTypeResult
+    );
+
+
+    assertEqual(
+      invalidTypeResult.decision,
+      "BLOCK",
+      "Type without target should BLOCK"
+    );
+
+    assertEqual(
+      invalidTypeResult.reason,
+      "TARGET_ID_REQUIRED",
+      "Type without target should explain the failure"
+    );
+
+
+    // ==================================================
+    // 11. Scroll without target
+    // ==================================================
+
+    const scrollAction = {
+      action: "scroll",
+      target_id: null,
+      confidence: 0.95,
+      metadata: {
+        direction: "down",
+        amount: 500
+      }
+    };
+
 
     const scrollResult =
-    evaluateAction(scrollAction);
+      evaluateAction(
+        scrollAction
+      );
+
+
+    console.log(
+      "Scroll:",
+      scrollResult
+    );
+
+
+    assertEqual(
+      scrollResult.decision,
+      "EXECUTE",
+      "Scroll should EXECUTE without a DOM target"
+    );
+
+
+    // ==================================================
+    // 12. Wait without target
+    // ==================================================
+
+    const waitAction = {
+      action: "wait",
+      target_id: null,
+      confidence: 0.95,
+      metadata: {}
+    };
+
 
     const waitResult =
-    evaluateAction(waitAction);
+      evaluateAction(
+        waitAction
+      );
+
 
     console.log(
-    "Click without target:",
-    invalidClickResult
+      "Wait:",
+      waitResult
+    );
+
+
+    assertEqual(
+      waitResult.decision,
+      "EXECUTE",
+      "Wait should EXECUTE without a DOM target"
+    );
+
+
+    // ==================================================
+    // 13. REGRESSION: unsupported action type
+    // ==================================================
+
+    const unsupportedAction = {
+      action: "dance",
+      target_id: null,
+      confidence: 0.95,
+      metadata: {}
+    };
+
+
+    const unsupportedResult =
+      evaluateAction(
+        unsupportedAction
+      );
+
+
+    console.log(
+      "Unsupported action:",
+      unsupportedResult
+    );
+
+
+    assertEqual(
+      unsupportedResult.decision,
+      "BLOCK",
+      "Unsupported action must be blocked at the safety gate"
+    );
+
+    assertEqual(
+      unsupportedResult.status,
+      "UNSUPPORTED_ACTION",
+      "Unsupported action must have explicit status"
+    );
+
+
+    // ==================================================
+    // 14. REGRESSION: malformed metadata
+    // ==================================================
+
+    const malformedMetadataAction = {
+      action: "click",
+      target_id: "el_name",
+      confidence: 0.95,
+      metadata: null
+    };
+
+
+    const malformedMetadataResult =
+      evaluateAction(
+        malformedMetadataAction
+      );
+
+
+    console.log(
+      "Malformed metadata:",
+      malformedMetadataResult
+    );
+
+
+    assertEqual(
+      malformedMetadataResult.decision,
+      "BLOCK",
+      "Malformed metadata must be blocked"
+    );
+
+    assertEqual(
+      malformedMetadataResult.status,
+      "INVALID_METADATA",
+      "Malformed metadata must have explicit status"
+    );
+
+
+    // ==================================================
+    // 15. REGRESSION: navigation missing URL
+    // ==================================================
+
+    const missingUrlAction = {
+      action: "navigate",
+      target_id: null,
+      confidence: 0.95,
+      metadata: {}
+    };
+
+
+    const missingUrlResult =
+      evaluateAction(
+        missingUrlAction
+      );
+
+
+    console.log(
+      "Missing navigation URL:",
+      missingUrlResult
+    );
+
+
+    assertEqual(
+      missingUrlResult.decision,
+      "BLOCK",
+      "Navigation without URL must BLOCK before confirmation"
+    );
+
+    assertEqual(
+      missingUrlResult.status,
+      "NAVIGATION_URL_REQUIRED",
+      "Missing navigation URL must have explicit status"
+    );
+
+
+    // ==================================================
+    // 16. REGRESSION: javascript: URL
+    // ==================================================
+
+    const javascriptNavigation = {
+      action: "navigate",
+      target_id: null,
+      confidence: 0.95,
+      metadata: {
+        url: "javascript:alert(1)"
+      }
+    };
+
+
+    const javascriptResult =
+      evaluateAction(
+        javascriptNavigation
+      );
+
+
+    console.log(
+      "javascript: navigation:",
+      javascriptResult
+    );
+
+
+    assertEqual(
+      javascriptResult.decision,
+      "BLOCK",
+      "javascript: navigation must BLOCK at safety gate"
+    );
+
+    assertEqual(
+      javascriptResult.status,
+      "UNSAFE_NAVIGATION_BLOCKED",
+      "javascript: navigation must have explicit safety status"
+    );
+
+
+    // ==================================================
+    // 17. data: URL
+    // ==================================================
+
+    const dataNavigation = {
+      action: "navigate",
+      target_id: null,
+      confidence: 0.95,
+      metadata: {
+        url: "data:text/html,<h1>Hello</h1>"
+      }
+    };
+
+
+    const dataResult =
+      evaluateAction(
+        dataNavigation
+      );
+
+
+    assertEqual(
+      dataResult.decision,
+      "BLOCK",
+      "data: navigation must BLOCK at safety gate"
+    );
+
+    assertEqual(
+      dataResult.status,
+      "UNSAFE_NAVIGATION_BLOCKED",
+      "data: navigation must have explicit safety status"
+    );
+
+
+    // ==================================================
+    // 18. file: URL
+    // ==================================================
+
+    const fileNavigation = {
+      action: "navigate",
+      target_id: null,
+      confidence: 0.95,
+      metadata: {
+        url: "file:///etc/passwd"
+      }
+    };
+
+
+    const fileResult =
+      evaluateAction(
+        fileNavigation
+      );
+
+
+    assertEqual(
+      fileResult.decision,
+      "BLOCK",
+      "file: navigation must BLOCK at safety gate"
+    );
+
+    assertEqual(
+      fileResult.status,
+      "UNSAFE_NAVIGATION_BLOCKED",
+      "file: navigation must have explicit safety status"
+    );
+
+
+    // ==================================================
+    // 19. ftp: URL
+    // ==================================================
+
+    const ftpNavigation = {
+      action: "navigate",
+      target_id: null,
+      confidence: 0.95,
+      metadata: {
+        url: "ftp://example.com"
+      }
+    };
+
+
+    const ftpResult =
+      evaluateAction(
+        ftpNavigation
+      );
+
+
+    assertEqual(
+      ftpResult.decision,
+      "BLOCK",
+      "ftp: navigation must BLOCK at safety gate"
+    );
+
+    assertEqual(
+      ftpResult.status,
+      "UNSAFE_NAVIGATION_BLOCKED",
+      "ftp: navigation must have explicit safety status"
+    );
+
+
+    // ==================================================
+    // 20. Direct URL helper checks
+    // ==================================================
+
+    assert(
+      isAllowedNavigationUrl(
+        "https://example.com"
+      ) === true,
+      "HTTPS URL should be allowed"
+    );
+
+
+    assert(
+      isAllowedNavigationUrl(
+        "http://example.com"
+      ) === true,
+      "HTTP URL should be allowed"
+    );
+
+
+    assert(
+      isAllowedNavigationUrl(
+        "javascript:alert(1)"
+      ) === false,
+      "javascript: URL should be rejected"
+    );
+
+
+    assert(
+      isAllowedNavigationUrl(
+        "data:text/html,<h1>Hello</h1>"
+      ) === false,
+      "data: URL should be rejected"
+    );
+
+
+    assert(
+      isAllowedNavigationUrl(
+        "file:///etc/passwd"
+      ) === false,
+      "file: URL should be rejected"
+    );
+
+
+    assert(
+      isAllowedNavigationUrl(
+        "ftp://example.com"
+      ) === false,
+      "ftp: URL should be rejected"
+    );
+
+
+    assert(
+      isAllowedNavigationUrl(
+        ""
+      ) === false,
+      "Empty URL should be rejected"
+    );
+
+
+    assert(
+      isAllowedNavigationUrl(
+        "not a valid URL"
+      ) === false,
+      "Malformed URL should be rejected"
+    );
+
+
+    // ==================================================
+    // 21. Confirmation re-check behavior
+    // ==================================================
+
+    const riskyConfirmed =
+      evaluateAction(
+        mockActions.riskySubmitClick,
+        {
+          confirmationGranted: true
+        }
+      );
+
+
+    console.log(
+      "Risky action after approval:",
+      riskyConfirmed
+    );
+
+
+    assertEqual(
+      riskyConfirmed.decision,
+      "EXECUTE",
+      "Approved risky action should EXECUTE after fresh safety evaluation"
+    );
+
+    assert(
+      riskyConfirmed.element !== null,
+      "Approved risky action must still resolve a fresh target"
+    );
+
+
+    // ==================================================
+    // 22. Confirmation does NOT bypass unsafe navigation
+    // ==================================================
+
+    const unsafeNavigationApproved =
+      evaluateAction(
+        javascriptNavigation,
+        {
+          confirmationGranted: true
+        }
+      );
+
+
+    console.log(
+      "Unsafe navigation after approval:",
+      unsafeNavigationApproved
+    );
+
+
+    assertEqual(
+      unsafeNavigationApproved.decision,
+      "BLOCK",
+      "Confirmation must never override unsafe navigation validation"
+    );
+
+    assertEqual(
+      unsafeNavigationApproved.status,
+      "UNSAFE_NAVIGATION_BLOCKED",
+      "Unsafe navigation must remain blocked after approval"
+    );
+
+
+    // ==================================================
+    // Final result
+    // ==================================================
+
+    console.log(
+      "----------------------------------------"
     );
 
     console.log(
-    "Type without target:",
-    invalidTypeResult
+      `P6 Safety Gate Tests: ${passed} passed, ${failed} failed`
     );
 
     console.log(
-    "Scroll without target:",
-    scrollResult
+      "----------------------------------------"
     );
 
-    console.log(
-    "Wait without target:",
-    waitResult
-    );
 
-    console.assert(
-    invalidClickResult.decision === "BLOCK",
-    "Click without target MUST be blocked"
-    );
-
-    console.assert(
-    invalidTypeResult.decision === "BLOCK",
-    "Type without target MUST be blocked"
-    );
-
-    console.assert(
-    scrollResult.decision === "EXECUTE",
-    "Scroll without target should execute"
-    );
-
-    console.assert(
-    waitResult.decision === "EXECUTE",
-    "Wait without target should execute"
-    );
-
-    console.log(
-      "===================================="
-    );
-
-    console.log(
-      "P6 Safety Gate tests completed."
-    );
-
-    console.log(
-      "===================================="
-
-    );
+    if (failed === 0) {
+      console.log(
+        "ALL P6 SAFETY GATE TESTS PASSED."
+      );
+    } else {
+      console.error(
+        "P6 SAFETY GATE TESTS FAILED."
+      );
+    }
 
   </script>
 
 </body>
-
 </html>

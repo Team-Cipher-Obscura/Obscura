@@ -3,10 +3,12 @@
   "name": "Obscura",
   "version": "1.0.0",
   "description": "Privacy-preserving browser agent",
+
   "permissions": [
-  "tabs",
-  "activeTab"
-],
+    "tabs",
+    "activeTab",
+    "downloads"
+  ],
 
   "background": {
     "service_worker": "background.js"

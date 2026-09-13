@@ -1,6 +1,22 @@
 // background.js
-// P1 - Capture Cycle Coordinator
-
+// P1 — Capture Cycle Coordinator
+//
+// Responsibilities:
+//   - Start/stop the repeating capture loop
+//   - Generate the authoritative cycle_id
+//   - Capture the visible viewport
+//   - Validate viewport stability
+//   - Send P1_CAPTURE_CYCLE to content.js
+//   - Receive P2/P3 outputs
+//   - Forward P3 outputs to popup / downstream P4 / P6
+//   - Save original + redacted screenshots
+//
+// P1 does NOT:
+//   - perform DOM extraction
+//   - run vision
+//   - perform PII detection
+//   - perform redaction
+//   - modify cycle_id
 
 
 // --------------------------------------------------
@@ -29,19 +45,28 @@ const savedDownloads = [];
 chrome.runtime.onMessage.addListener((message) => {
 
   if (message?.type === "START_CAPTURE") {
+
     startCaptureLoop(message.task);
+
     return false;
   }
+
 
   if (message?.type === "STOP_CAPTURE") {
+
     stopCaptureLoop();
+
     return false;
   }
 
+
   if (message?.type === "SAVE_REDACTED_SCREENSHOT") {
+
     saveRedactedScreenshot(message);
+
     return false;
   }
+
 
   return false;
 });
@@ -53,7 +78,6 @@ chrome.runtime.onMessage.addListener((message) => {
 
 async function startCaptureLoop(task) {
 
-  // Prevent starting a second loop.
   if (captureRunning) {
     return;
   }
@@ -62,32 +86,22 @@ async function startCaptureLoop(task) {
 
   notifyPopup("Capture loop started.");
 
+
   while (captureRunning) {
 
-    // ----------------------------------------------
-    // Run exactly one complete cycle.
-    // The next cycle cannot start until this returns.
-    // ----------------------------------------------
-
+    // One complete cycle at a time.
     await runCaptureCycle(task);
 
-
-    // ----------------------------------------------
-    // Stop was requested while the cycle was running.
-    // Don't start another cycle.
-    // ----------------------------------------------
 
     if (!captureRunning) {
       break;
     }
 
 
-    // ----------------------------------------------
-    // Wait 5 seconds before the next cycle.
-    // ----------------------------------------------
-
+    // Wait before beginning the next cycle.
     await sleep(CAPTURE_INTERVAL_MS);
   }
+
 
   captureRunning = false;
 }
@@ -122,113 +136,6 @@ function sleep(ms) {
 
 
 // --------------------------------------------------
-// Save original + redacted screenshots
-// --------------------------------------------------
-
-async function saveRedactedScreenshot({
-  cycle_id,
-  original_screenshot,
-  redacted_screenshot
-}) {
-
-  try {
-
-    const isJpeg =
-      original_screenshot?.startsWith("/9j/");
-
-    const originalExt =
-      isJpeg ? "jpg" : "png";
-
-
-    const entry = {
-      cycleId: cycle_id,
-      originalId: null,
-      redactedId: null
-    };
-
-
-    // ----------------------------------------------
-    // Save original screenshot
-    // ----------------------------------------------
-
-    if (original_screenshot) {
-
-      entry.originalId =
-        await chrome.downloads.download({
-          url:
-            `data:image/${originalExt};base64,${original_screenshot}`,
-
-          filename:
-            `obscura-redacted/${cycle_id}-ORIGINAL.${originalExt}`,
-
-          saveAs: false,
-
-          conflictAction: "overwrite"
-        });
-    }
-
-
-    // ----------------------------------------------
-    // Save redacted screenshot
-    // ----------------------------------------------
-
-    if (redacted_screenshot) {
-
-      entry.redactedId =
-        await chrome.downloads.download({
-          url:
-            `data:image/png;base64,${redacted_screenshot}`,
-
-          filename:
-            `obscura-redacted/${cycle_id}-REDACTED.png`,
-
-          saveAs: false,
-
-          conflictAction: "overwrite"
-        });
-    }
-
-
-    savedDownloads.push(entry);
-
-
-    // ----------------------------------------------
-    // Remove oldest pair when over the limit
-    // ----------------------------------------------
-
-    if (savedDownloads.length > MAX_SAVED_PAIRS) {
-
-      const oldest =
-        savedDownloads.shift();
-
-      for (const id of [
-        oldest.originalId,
-        oldest.redactedId
-      ]) {
-
-        if (id == null) {
-          continue;
-        }
-
-        chrome.downloads.removeFile(id)
-          .catch(() => {});
-
-        chrome.downloads.erase({ id })
-          .catch(() => {});
-      }
-    }
-
-  } catch (error) {
-
-    console.error(
-      "[Obscura] Failed to save screenshots:",
-      error
-    );
-  }
-}
-
-
-// --------------------------------------------------
 // Get active browser tab
 // --------------------------------------------------
 
@@ -246,6 +153,9 @@ async function getActiveTab() {
 
 // --------------------------------------------------
 // Capture visible viewport
+//
+// Chrome returns a PNG data URL:
+// data:image/png;base64,...
 // --------------------------------------------------
 
 async function captureScreenshot() {
@@ -281,6 +191,8 @@ async function getViewportState(tabId) {
 function sameViewport(a, b) {
 
   return (
+    a &&
+    b &&
     a.scrollX === b.scrollX &&
     a.scrollY === b.scrollY &&
     a.innerWidth === b.innerWidth &&
@@ -304,8 +216,10 @@ function buildPayload({
 
   return {
 
+    // P1 is authoritative for this ID.
     cycle_id: cycleId,
 
+    // PNG data URL from captureVisibleTab().
     screenshot,
 
     tab_url: tab.url,
@@ -327,10 +241,10 @@ function buildPayload({
 // --------------------------------------------------
 // Send P1 capture cycle to content.js
 //
-// There is NO P2_FRAME message.
-//
 // content.js performs:
-// P2 perception → P3 processing
+//   P2 → P3
+//
+// There is no P2_FRAME message.
 // --------------------------------------------------
 
 async function sendToDownstream(
@@ -341,11 +255,12 @@ async function sendToDownstream(
   if (!tabId) {
 
     console.error(
-      "[Obscura] No tab ID available."
+      "[Obscura P1] No tab ID available."
     );
 
     return {
-      valid: false
+      valid: false,
+      error: "No tab ID available."
     };
   }
 
@@ -363,13 +278,13 @@ async function sendToDownstream(
 
 
     console.log(
-      "[Obscura] Capture payload sent:",
+      "[Obscura P1] Capture payload sent:",
       payload
     );
 
 
     console.log(
-      "[Obscura] Content/P2/P3 response:",
+      "[Obscura P1] P2/P3 response:",
       response
     );
 
@@ -381,13 +296,13 @@ async function sendToDownstream(
   } catch (error) {
 
     console.error(
-      "[Obscura] Failed to send capture payload:",
+      "[Obscura P1] Failed to send capture payload:",
       error
     );
 
     return {
       valid: false,
-      error: error.message
+      error: error?.message || "Downstream communication failed."
     };
   }
 }
@@ -405,6 +320,177 @@ function notifyPopup(status) {
       status
     })
     .catch(() => {});
+}
+
+
+// --------------------------------------------------
+// Convert screenshot data URL to bare base64
+//
+// P3 returns a bare base64 PNG string.
+// P1 captureVisibleTab() returns a data URL.
+//
+// This helper keeps the two formats separate.
+// --------------------------------------------------
+
+function dataUrlToBase64(dataUrl) {
+
+  if (!dataUrl) {
+    return null;
+  }
+
+
+  if (!dataUrl.startsWith("data:")) {
+    return dataUrl;
+  }
+
+
+  const commaIndex =
+    dataUrl.indexOf(",");
+
+
+  if (commaIndex === -1) {
+    return dataUrl;
+  }
+
+
+  return dataUrl.slice(
+    commaIndex + 1
+  );
+}
+
+
+// --------------------------------------------------
+// Save original + redacted screenshots
+// --------------------------------------------------
+
+async function saveRedactedScreenshot({
+  cycle_id,
+  original_screenshot,
+  redacted_screenshot
+}) {
+
+  try {
+
+    if (!cycle_id) {
+      throw new Error("Missing cycle_id.");
+    }
+
+
+    const originalBase64 =
+      dataUrlToBase64(
+        original_screenshot
+      );
+
+
+    const redactedBase64 =
+      dataUrlToBase64(
+        redacted_screenshot
+      );
+
+
+    const entry = {
+      cycleId: cycle_id,
+      originalId: null,
+      redactedId: null
+    };
+
+
+    // ----------------------------------------------
+    // Save original
+    // ----------------------------------------------
+
+    if (originalBase64) {
+
+      entry.originalId =
+        await chrome.downloads.download({
+
+          url:
+            `data:image/png;base64,${originalBase64}`,
+
+          filename:
+            `obscura-redacted/${cycle_id}-ORIGINAL.png`,
+
+          saveAs: false,
+
+          conflictAction: "overwrite"
+        });
+    }
+
+
+    // ----------------------------------------------
+    // Save redacted
+    // ----------------------------------------------
+
+    if (redactedBase64) {
+
+      entry.redactedId =
+        await chrome.downloads.download({
+
+          url:
+            `data:image/png;base64,${redactedBase64}`,
+
+          filename:
+            `obscura-redacted/${cycle_id}-REDACTED.png`,
+
+          saveAs: false,
+
+          conflictAction: "overwrite"
+        });
+    }
+
+
+    // Only retain the pair if at least one
+    // screenshot was successfully saved.
+    if (
+      entry.originalId !== null ||
+      entry.redactedId !== null
+    ) {
+
+      savedDownloads.push(entry);
+    }
+
+
+    // ----------------------------------------------
+    // Remove oldest pair when over limit
+    // ----------------------------------------------
+
+    while (
+      savedDownloads.length >
+      MAX_SAVED_PAIRS
+    ) {
+
+      const oldest =
+        savedDownloads.shift();
+
+
+      for (const id of [
+        oldest.originalId,
+        oldest.redactedId
+      ]) {
+
+        if (id == null) {
+          continue;
+        }
+
+
+        try {
+          await chrome.downloads.removeFile(id);
+        } catch (_) {}
+
+
+        try {
+          await chrome.downloads.erase({ id });
+        } catch (_) {}
+      }
+    }
+
+  } catch (error) {
+
+    console.error(
+      "[Obscura P1] Failed to save screenshots:",
+      error
+    );
+  }
 }
 
 
@@ -434,7 +520,7 @@ async function runCaptureCycle(
   // ------------------------------------------------
   // ONE authoritative cycle_id
   //
-  // Retries for this cycle reuse this ID.
+  // All retries for this cycle reuse this ID.
   // ------------------------------------------------
 
   const cycleId =
@@ -463,7 +549,9 @@ async function runCaptureCycle(
       // --------------------------------------------
 
       const viewportBefore =
-        await getViewportState(tab.id);
+        await getViewportState(
+          tab.id
+        );
 
 
       // --------------------------------------------
@@ -487,7 +575,9 @@ async function runCaptureCycle(
       // --------------------------------------------
 
       const viewportAfter =
-        await getViewportState(tab.id);
+        await getViewportState(
+          tab.id
+        );
 
 
       // --------------------------------------------
@@ -525,26 +615,30 @@ async function runCaptureCycle(
 
       const payload =
         buildPayload({
+
           task,
+
           screenshot,
+
           tab,
-          viewport: viewportAfter,
+
+          viewport:
+            viewportAfter,
+
           cycleId,
+
           timestamp
         });
 
 
       console.log(
-        "[Obscura] Capture cycle payload:",
+        "[Obscura P1] Capture cycle payload:",
         payload
       );
 
 
       // --------------------------------------------
-      // 7. Send to content.js
-      //
-      // content.js:
-      // P2 → P3
+      // 7. P1 → P2 → P3
       // --------------------------------------------
 
       const result =
@@ -559,6 +653,12 @@ async function runCaptureCycle(
       // --------------------------------------------
 
       if (!result?.valid) {
+
+        console.error(
+          "[Obscura P1] Downstream returned invalid result:",
+          result
+        );
+
 
         if (attempt < maxAttempts) {
 
@@ -588,21 +688,24 @@ async function runCaptureCycle(
 
 
       console.log(
-        `[Obscura] Cycle ${cycleId} completed successfully.`
+        `[Obscura P1] Cycle ${cycleId} completed successfully.`,
+        result
       );
 
 
       // --------------------------------------------
-      // 10. Privacy counters → popup
+      // 10. P3 → P1 privacy counters
       // --------------------------------------------
 
       if (result.toP1) {
 
         chrome.runtime
           .sendMessage({
+
             type: "PRIVACY_COUNTERS",
 
-            cycle_id: cycleId,
+            cycle_id:
+              cycleId,
 
             privacy_status:
               result.toP1.privacy_status,
@@ -624,46 +727,55 @@ async function runCaptureCycle(
 
 
       // --------------------------------------------
-      // 11. P4 payload
+      // 11. P3 → P4
       // --------------------------------------------
 
       if (result.toP4) {
 
         chrome.runtime
           .sendMessage({
+
             type: "P4_INPUT",
-            payload: result.toP4
+
+            payload:
+              result.toP4
           })
           .catch(() => {});
       }
 
 
       // --------------------------------------------
-      // 12. P6 payload
+      // 12. P3 → P6
       // --------------------------------------------
 
       if (result.toP6) {
 
         chrome.runtime
           .sendMessage({
+
             type: "P6_SENSITIVE_MAP",
-            payload: result.toP6
+
+            payload:
+              result.toP6
           })
           .catch(() => {});
       }
 
 
       // --------------------------------------------
-      // 13. Update popup screenshots
+      // 13. Update popup preview
       // --------------------------------------------
 
       if (result.toP4?.screenshot) {
 
         chrome.runtime
           .sendMessage({
-            type: "REDACTED_PREVIEW",
 
-            cycle_id: cycleId,
+            type:
+              "REDACTED_PREVIEW",
+
+            cycle_id:
+              cycleId,
 
             original_screenshot:
               screenshot,
@@ -672,6 +784,23 @@ async function runCaptureCycle(
               result.toP4.screenshot
           })
           .catch(() => {});
+
+
+        // ------------------------------------------
+        // Also persist the pair on disk.
+        // ------------------------------------------
+
+        saveRedactedScreenshot({
+
+          cycle_id:
+            cycleId,
+
+          original_screenshot:
+            screenshot,
+
+          redacted_screenshot:
+            result.toP4.screenshot
+        });
       }
 
 
@@ -680,7 +809,7 @@ async function runCaptureCycle(
     } catch (error) {
 
       console.error(
-        `[Obscura] Error during capture attempt ${attempt}:`,
+        `[Obscura P1] Error during capture attempt ${attempt}:`,
         error
       );
 

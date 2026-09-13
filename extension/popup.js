@@ -51,6 +51,7 @@ startBtn.addEventListener("click", () => {
   const task =
     taskInput.value.trim();
 
+
   if (!task) {
 
     statusEl.textContent =
@@ -65,8 +66,11 @@ startBtn.addEventListener("click", () => {
 
 
   chrome.runtime.sendMessage({
-    type: "START_CAPTURE",
-    task: task
+
+    type:
+      "START_CAPTURE",
+
+    task
   });
 });
 
@@ -78,7 +82,9 @@ startBtn.addEventListener("click", () => {
 stopBtn.addEventListener("click", () => {
 
   chrome.runtime.sendMessage({
-    type: "STOP_CAPTURE"
+
+    type:
+      "STOP_CAPTURE"
   });
 });
 
@@ -100,7 +106,8 @@ chrome.runtime.onMessage.addListener(
     // ----------------------------------------------
 
     if (
-      message.type === "STATUS_UPDATE"
+      message.type ===
+      "STATUS_UPDATE"
     ) {
 
       statusEl.textContent =
@@ -110,29 +117,20 @@ chrome.runtime.onMessage.addListener(
 
     // ----------------------------------------------
     // Privacy counters
-    //
-    // Expected format:
-    //
-    // {
-    //   type: "PRIVACY_COUNTERS",
-    //   cycle_id,
-    //   privacy_status,
-    //   pii_detected_count,
-    //   redacted_count,
-    //   sensitive_types,
-    //   sent_to_ai_count
-    // }
     // ----------------------------------------------
 
     if (
-      message.type === "PRIVACY_COUNTERS"
+      message.type ===
+      "PRIVACY_COUNTERS"
     ) {
 
       piiCountEl.textContent =
         message.pii_detected_count ?? 0;
 
+
       redactedCountEl.textContent =
         message.redacted_count ?? 0;
+
 
       sentCountEl.textContent =
         message.sent_to_ai_count ?? 0;
@@ -141,27 +139,37 @@ chrome.runtime.onMessage.addListener(
 
     // ----------------------------------------------
     // Original + redacted screenshots
+    //
+    // P1 original = PNG data URL
+    // P3 redacted = bare base64 PNG
     // ----------------------------------------------
 
     if (
-      message.type === "REDACTED_PREVIEW"
+      message.type ===
+      "REDACTED_PREVIEW"
     ) {
 
       if (
+        originalPreviewEl &&
         message.original_screenshot
       ) {
 
         originalPreviewEl.src =
-          `data:image/png;base64,${message.original_screenshot}`;
+          message.original_screenshot.startsWith("data:")
+            ? message.original_screenshot
+            : `data:image/png;base64,${message.original_screenshot}`;
       }
 
 
       if (
+        redactedPreviewEl &&
         message.redacted_screenshot
       ) {
 
         redactedPreviewEl.src =
-          `data:image/png;base64,${message.redacted_screenshot}`;
+          message.redacted_screenshot.startsWith("data:")
+            ? message.redacted_screenshot
+            : `data:image/png;base64,${message.redacted_screenshot}`;
       }
     }
   }

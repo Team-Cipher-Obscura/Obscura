@@ -10,31 +10,27 @@
 //   - vision inference
 //   - DOM + vision fusion
 //
-// P3 then receives:
+// P3 receives:
 //   - P2 elements
 //   - original P1 screenshot
 //   - P1-authoritative cycle_id
 //
 // P3 returns:
-//   - toP4
 //   - toP1
+//   - toP4
 //   - toP6
 //
 // P1 owns cycle_id.
 // This file never creates or replaces it.
 
-import {
-  processFrame
-} from "./src/index.js";
+import { processFrame } from "./src/index.js";
 
 
 // ==================================================
 // P2 perception
 // ==================================================
 
-async function runP2Perception(
-  p1Payload
-) {
+async function runP2Perception(p1Payload) {
 
   const {
     cycle_id,
@@ -48,18 +44,11 @@ async function runP2Perception(
   // ----------------------------------------------
 
   if (!cycle_id) {
-
-    throw new Error(
-      "Missing cycle_id."
-    );
+    throw new Error("Missing cycle_id.");
   }
 
-
   if (!screenshot) {
-
-    throw new Error(
-      "Missing screenshot."
-    );
+    throw new Error("Missing screenshot.");
   }
 
 
@@ -70,7 +59,6 @@ async function runP2Perception(
   const domElements =
     P2DOM.extractAllElements();
 
-
   const dom_extracted_at =
     Date.now();
 
@@ -80,9 +68,7 @@ async function runP2Perception(
   // ==================================================
 
   const image =
-    await loadScreenshotImage(
-      screenshot
-    );
+    await loadScreenshotImage(screenshot);
 
 
   // ==================================================
@@ -92,18 +78,13 @@ async function runP2Perception(
   let session =
     P2Vision.getSession();
 
-
   if (!session) {
-
     session =
       await P2Vision.loadVisionModel();
   }
 
-
   const visionDetections =
-    await P2Vision.runInference(
-      image
-    );
+    await P2Vision.runInference(image);
 
 
   // ==================================================
@@ -124,6 +105,7 @@ async function runP2Perception(
   return {
 
     // P1-owned ID.
+    // P2 must never generate or replace this.
     cycle_id,
 
     dom_extracted_at,
@@ -143,41 +125,33 @@ async function runP2Perception(
 // Decode P1 screenshot
 // ==================================================
 
-function loadScreenshotImage(
-  dataUrl
-) {
+function loadScreenshotImage(dataUrl) {
 
-  return new Promise(
-    (resolve, reject) => {
+  return new Promise((resolve, reject) => {
 
-      const image =
-        new Image();
+    const image =
+      new Image();
 
 
-      image.onload =
-        () => {
-
-          resolve(
-            image
-          );
-        };
+    image.onload = () => {
+      resolve(image);
+    };
 
 
-      image.onerror =
-        () => {
+    image.onerror = () => {
 
-          reject(
-            new Error(
-              "Failed to decode P1 screenshot."
-            )
-          );
-        };
+      reject(
+        new Error(
+          "Failed to decode P1 screenshot."
+        )
+      );
+
+    };
 
 
-      image.src =
-        dataUrl;
-    }
-  );
+    image.src =
+      dataUrl;
+  });
 }
 
 
@@ -217,7 +191,6 @@ chrome.runtime.onMessage.addListener(
           window.innerHeight
       });
 
-
       return false;
     }
 
@@ -231,7 +204,7 @@ chrome.runtime.onMessage.addListener(
       "P1_CAPTURE_CYCLE"
     ) {
 
-      return;
+      return false;
     }
 
 
@@ -280,6 +253,9 @@ chrome.runtime.onMessage.addListener(
         valid:
           false,
 
+        cycle_id:
+          p1Payload.cycle_id,
+
         error:
           "Missing screenshot"
       });
@@ -298,9 +274,9 @@ chrome.runtime.onMessage.addListener(
     // ==================================================
     // P2 → P3
     //
-    // This work is asynchronous, so the listener
-    // returns true below to keep the message channel
-    // alive until sendResponse() executes.
+    // This work is asynchronous.
+    // return true below keeps the Chrome message
+    // channel open until sendResponse() executes.
     // ==================================================
 
     (async () => {
@@ -324,7 +300,7 @@ chrome.runtime.onMessage.addListener(
 
 
         // ==========================================
-        // Verify P2 did not replace P1's ID.
+        // Verify P2 preserved P1's ID.
         // ==========================================
 
         if (
@@ -340,20 +316,26 @@ chrome.runtime.onMessage.addListener(
 
         // ==========================================
         // STEP 2 — P2 → P3
+        //
+        // P3 expects frame_id.
+        // P1's cycle_id is therefore explicitly mapped
+        // to frame_id here.
+        //
+        // Screenshot remains P1-authoritative.
         // ==========================================
 
         const p3Result =
           await processFrame({
 
-            // P1's cycle_id remains authoritative.
             frame_id:
               p1Payload.cycle_id,
 
-            // P2 elements.
+            timestamp:
+              p2Result.dom_extracted_at,
+
             elements:
               p2Result.elements,
 
-            // Original screenshot captured by P1.
             screenshot:
               p1Payload.screenshot
           });
@@ -366,7 +348,7 @@ chrome.runtime.onMessage.addListener(
 
 
         // ==========================================
-        // Verify P3 did not replace P1's ID.
+        // Verify P3 preserved P1's ID.
         // ==========================================
 
         if (
@@ -393,8 +375,7 @@ chrome.runtime.onMessage.addListener(
           cycle_id:
             p1Payload.cycle_id,
 
-          // P2 result, retained for debugging/use
-          // by the P1 pipeline.
+          // P2 result retained for P1/debugging.
           perception:
             p2Result,
 
@@ -424,8 +405,8 @@ chrome.runtime.onMessage.addListener(
           valid:
             false,
 
-          // Even on failure, preserve
-          // P1's authoritative ID.
+          // Preserve P1's authoritative ID
+          // even when the pipeline fails.
           cycle_id:
             p1Payload.cycle_id,
 
@@ -440,8 +421,8 @@ chrome.runtime.onMessage.addListener(
 
     // ----------------------------------------------
     // IMPORTANT:
-    // Keep the Chrome message channel open
-    // for the asynchronous P2/P3 work.
+    // Keep the Chrome message channel open for
+    // asynchronous P2/P3 processing.
     // ----------------------------------------------
 
     return true;

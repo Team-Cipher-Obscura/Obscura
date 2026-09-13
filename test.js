@@ -10,7 +10,7 @@ const {
 } = require("./src/changeDetection");
 const { filterElements } = require("./src/filter");
 
-const task = "Find Mumbai flight";
+const task = "Enter password here";
 
 console.log("\n--- P4 Decisions ---\n");
 

@@ -7,7 +7,15 @@ const STOPWORDS = new Set([
   "for",
   "on",
   "in",
-  "of"
+  "of",
+  "enter",
+  "click",
+  "select",
+  "submit",
+  "type",
+  "choose",
+  "tap",
+  "here"
 ]);
 
 const RELEVANCE_THRESHOLD = 0.3;

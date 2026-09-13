@@ -160,14 +160,5 @@
       "sensitive": false
     }
   ],
-  "sanitized_regions": [
-    {
-      "id": "reg_001",
-      "sensitive_type": "face",
-      "bbox": [500, 60, 80, 80],
-      "confidence": 0.88,
-      "detected_by": "face_detection"
-    }
-  ],
   "screenshot": "<base64 sanitized image, native dimensions, unresized>"
 }

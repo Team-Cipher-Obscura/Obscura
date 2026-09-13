@@ -3,6 +3,19 @@
 // extracts DOM information,
 // runs local YOLO vision on P1's screenshot,
 // and fuses DOM + vision results.
+//
+// P1 remains responsible for:
+//   - generating cycle_id
+//   - capturing the screenshot
+//   - sending P1_CAPTURE_CYCLE
+//
+// P2 is responsible for:
+//   - DOM extraction
+//   - local vision inference
+//   - DOM + vision fusion
+//   - returning the perception payload
+//
+// P2 does NOT modify cycle_id.
 
 
 // --------------------------------------------------
@@ -10,6 +23,7 @@
 // --------------------------------------------------
 
 function loadScreenshotImage(dataUrl) {
+
   return new Promise((resolve, reject) => {
 
     const image = new Image();
@@ -19,7 +33,11 @@ function loadScreenshotImage(dataUrl) {
     };
 
     image.onerror = () => {
-      reject(new Error("Failed to decode P1 screenshot."));
+      reject(
+        new Error(
+          "Failed to decode P1 screenshot."
+        )
+      );
     };
 
     image.src = dataUrl;
@@ -41,23 +59,35 @@ async function createPerceptionPayload(p1Payload) {
 
 
   // ----------------------------------------------
-  // 1. DOM perception
+  // Validate P1 payload
   // ----------------------------------------------
 
-  const domElements = P2DOM.extractAllElements();
+  if (!cycle_id) {
+    throw new Error("Missing cycle_id.");
+  }
 
-  const dom_extracted_at = Date.now();
+  if (!screenshot) {
+    throw new Error("Missing screenshot.");
+  }
+
+
+  // ----------------------------------------------
+  // 1. DOM extraction
+  // ----------------------------------------------
+
+  const domElements =
+    P2DOM.extractAllElements();
+
+  const dom_extracted_at =
+    Date.now();
 
 
   // ----------------------------------------------
   // 2. Decode P1 screenshot
   // ----------------------------------------------
 
-  if (!screenshot) {
-    throw new Error("P1 screenshot is missing.");
-  }
-
-  const image = await loadScreenshotImage(screenshot);
+  const image =
+    await loadScreenshotImage(screenshot);
 
 
   console.log(
@@ -69,10 +99,11 @@ async function createPerceptionPayload(p1Payload) {
 
 
   // ----------------------------------------------
-  // 3. Run YOLO visual inference
+  // 3. Local YOLO vision inference
   // ----------------------------------------------
 
-  let session = P2Vision.getSession();
+  let session =
+    P2Vision.getSession();
 
   if (!session) {
 
@@ -80,7 +111,8 @@ async function createPerceptionPayload(p1Payload) {
       "[P2 Vision] Model not ready. Loading model..."
     );
 
-    session = await P2Vision.loadVisionModel();
+    session =
+      await P2Vision.loadVisionModel();
   }
 
 
@@ -95,7 +127,7 @@ async function createPerceptionPayload(p1Payload) {
 
 
   // ----------------------------------------------
-  // 4. Fuse DOM + Vision
+  // 4. DOM + Vision fusion
   // ----------------------------------------------
 
   const fused =
@@ -106,29 +138,38 @@ async function createPerceptionPayload(p1Payload) {
 
 
   // ----------------------------------------------
-  // 5. Return P2 result
+  // 5. Build P2 perception payload
   // ----------------------------------------------
 
   return {
+
+    // P1-generated ID is preserved exactly.
     cycle_id,
 
+    // Time when P2 extracted the DOM.
     dom_extracted_at,
 
-    elements: fused.elements,
+    // DOM elements enriched with vision evidence.
+    elements:
+      fused.elements,
 
-    vision_only: fused.vision_only,
+    // Visual detections that did not match a DOM element.
+    vision_only:
+      fused.vision_only,
 
+    // Viewport information received from P1.
     viewport
   };
 }
 
 
 // --------------------------------------------------
-// Messages from P1 / background.js
+// Messages from P1
 // --------------------------------------------------
 
 chrome.runtime.onMessage.addListener(
   (message, sender, sendResponse) => {
+
 
     // ----------------------------------------------
     // P1 asks for current viewport state
@@ -137,10 +178,19 @@ chrome.runtime.onMessage.addListener(
     if (message?.type === "GET_VIEWPORT") {
 
       sendResponse({
-        scrollX: window.scrollX,
-        scrollY: window.scrollY,
-        innerWidth: window.innerWidth,
-        innerHeight: window.innerHeight
+
+        scrollX:
+          window.scrollX,
+
+        scrollY:
+          window.scrollY,
+
+        innerWidth:
+          window.innerWidth,
+
+        innerHeight:
+          window.innerHeight
+
       });
 
       return false;
@@ -148,19 +198,23 @@ chrome.runtime.onMessage.addListener(
 
 
     // ----------------------------------------------
-    // P1 sends capture cycle
+    // Ignore unrelated messages
     // ----------------------------------------------
 
-    if (message?.type !== "P1_CAPTURE_CYCLE") {
+    if (
+      message?.type !==
+      "P1_CAPTURE_CYCLE"
+    ) {
       return;
     }
 
 
-    const p1Payload = message.payload;
+    const p1Payload =
+      message.payload;
 
 
     // ----------------------------------------------
-    // Validate P1 payload
+    // Validate cycle_id
     // ----------------------------------------------
 
     if (!p1Payload?.cycle_id) {
@@ -170,13 +224,21 @@ chrome.runtime.onMessage.addListener(
       );
 
       sendResponse({
+
         valid: false,
-        error: "Missing cycle_id"
+
+        error:
+          "Missing cycle_id"
+
       });
 
-      return true;
+      return false;
     }
 
+
+    // ----------------------------------------------
+    // Validate screenshot
+    // ----------------------------------------------
 
     if (!p1Payload?.screenshot) {
 
@@ -185,11 +247,15 @@ chrome.runtime.onMessage.addListener(
       );
 
       sendResponse({
+
         valid: false,
-        error: "Missing screenshot"
+
+        error:
+          "Missing screenshot"
+
       });
 
-      return true;
+      return false;
     }
 
 
@@ -198,17 +264,13 @@ chrome.runtime.onMessage.addListener(
       p1Payload.cycle_id
     );
 
-    console.log(
-      "[P2] Screenshot received:",
-      true
-    );
-
 
     // ----------------------------------------------
     // Run P2 asynchronously
     // ----------------------------------------------
 
     createPerceptionPayload(p1Payload)
+
       .then((perceptionPayload) => {
 
         console.log(
@@ -216,12 +278,18 @@ chrome.runtime.onMessage.addListener(
           perceptionPayload
         );
 
+
         sendResponse({
+
           valid: true,
-          payload: perceptionPayload
+
+          payload:
+            perceptionPayload
+
         });
 
       })
+
       .catch((error) => {
 
         console.error(
@@ -229,17 +297,24 @@ chrome.runtime.onMessage.addListener(
           error
         );
 
+
         sendResponse({
+
           valid: false,
-          error: error.message
+
+          error:
+            error?.message ||
+            "P2 perception failed."
+
         });
 
       });
 
 
-    // IMPORTANT:
-    // Keep Chrome message channel open for
-    // asynchronous P2 processing.
+    // ----------------------------------------------
+    // Keep Chrome message channel open because
+    // P2 processing is asynchronous.
+    // ----------------------------------------------
 
     return true;
   }

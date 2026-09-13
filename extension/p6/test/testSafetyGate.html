@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>P6 Safety Gate Test</title>
+</head>
+
+<body>
+
+  <h1>P6 Safety Gate Test</h1>
+
+  <input
+    data-agent-id="el_name"
+    placeholder="Name"
+  >
+
+  <button data-agent-id="el_submit">
+    Submit
+  </button>
+
+  <button data-agent-id="el_delete">
+    Delete Account
+  </button>
+
+  <input
+    data-agent-id="el_new_password"
+    type="password"
+    autocomplete="new-password"
+  >
+
+  <input
+    data-agent-id="el_password"
+    type="password"
+  >
+
+
+  <script type="module">
+
+    import { evaluateAction }
+      from "../safetyGate.js";
+
+    import {
+      update
+    } from "../sensitiveRegistry.js";
+
+    import {
+      mockP3Payload
+    } from "../mock/p3Payload.js";
+
+    import {
+      mockActions
+    } from "../mock/p5Actions.js";
+
+
+    // Load P3's sensitive-element information
+    update(mockP3Payload);
+
+
+    // -----------------------------------------------
+    // 1. Safe click
+    // -----------------------------------------------
+
+    const safe =
+      evaluateAction(
+        mockActions.safeClick
+      );
+
+    console.log(
+      "Safe click:",
+      safe
+    );
+
+    console.assert(
+      safe.decision === "EXECUTE",
+      "Safe click should EXECUTE"
+    );
+
+
+    // -----------------------------------------------
+    // 2. Submit button
+    // -----------------------------------------------
+
+    const submit =
+      evaluateAction(
+        mockActions.riskySubmitClick
+      );
+
+    console.log(
+      "Risky submit:",
+      submit
+    );
+
+    console.assert(
+      submit.decision === "CONFIRM",
+      "Submit should require confirmation"
+    );
+
+
+    // -----------------------------------------------
+    // 3. Delete button
+    // -----------------------------------------------
+
+    const deleteAction =
+      evaluateAction(
+        mockActions.riskyDeleteClick
+      );
+
+    console.log(
+      "Risky delete:",
+      deleteAction
+    );
+
+    console.assert(
+      deleteAction.decision === "CONFIRM",
+      "Delete should require confirmation"
+    );
+
+
+    // -----------------------------------------------
+    // 4. Password typing
+    // -----------------------------------------------
+
+    const password =
+      evaluateAction(
+        mockActions.passwordTyping
+      );
+
+    console.log(
+      "Password typing:",
+      password
+    );
+
+    console.assert(
+      password.decision === "CONFIRM",
+      "Password typing should require confirmation"
+    );
+
+
+    const navigationAction = {
+    action: "navigate",
+    target_id: null,
+    confidence: 0.95,
+    metadata: {
+        url: "https://example.com"
+    }
+    };
+
+    //Navigation
+    const navigation =
+    evaluateAction(navigationAction);
+
+    console.log(
+    "Navigation:",
+    navigation
+    );
+
+    console.assert(
+    navigation.decision === "CONFIRM",
+    "Navigation should require confirmation"
+    );
+    // -----------------------------------------------
+    // 5. P3 hard veto
+    // -----------------------------------------------
+
+    const sensitive =
+      evaluateAction(
+        mockActions.sensitiveOverrideClick
+      );
+
+    console.log(
+      "Sensitive override:",
+      sensitive
+    );
+
+    console.assert(
+      sensitive.decision === "BLOCK",
+      "P3-sensitive target MUST be blocked"
+    );
+
+
+    console.log(
+      "===================================="
+    );
+
+    console.log(
+      "P6 Safety Gate tests completed."
+    );
+
+    console.log(
+      "===================================="
+
+    );
+
+  </script>
+
+</body>
+
+</html>

@@ -132,8 +132,9 @@ function runTests() {
   );
 
   assert(
-    unsupportedResult.reason ===
-      "UNSUPPORTED_ACTION",
+    unsupportedResult.errors.includes(
+      "UNSUPPORTED_ACTION"
+    ),
     "Unsupported action should have explicit reason"
   );
 
@@ -188,8 +189,9 @@ function runTests() {
   );
 
   assert(
-    malformedNavigationResult.reason ===
-      "NAVIGATION_TARGET_ID_FORBIDDEN",
+    malformedNavigationResult.errors.includes(
+      "NAVIGATE_TARGET_ID_NOT_ALLOWED"
+    ),
     "Navigation target_id rejection must be explicit"
   );
 

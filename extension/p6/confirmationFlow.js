@@ -79,9 +79,15 @@ function buildTargetSummary(element) {
     return `Password field (${tagName})`;
   }
 
+  const visibleText =
+    element.innerText ||
+    element.textContent ||
+    "";
+
   const label =
     ariaLabel ||
     title ||
+    visibleText ||
     name ||
     id;
 

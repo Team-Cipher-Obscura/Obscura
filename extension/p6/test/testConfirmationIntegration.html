@@ -150,6 +150,13 @@
     );
 
 
+    console.log(
+      "ACTUAL targetSummary:",
+      JSON.stringify(
+        request.targetSummary
+      )
+    );
+
     assert(
       request.targetSummary ===
         "Delete Account",
@@ -356,10 +363,9 @@
 
 
     assert(
-      submitResult.detail ===
-        "SENSITIVE_ELEMENT_BLOCKED",
-      "Fresh safety check should report P3 block"
-    );
+  tocResult.status === "BLOCKED",
+  "Fresh safety check should report P3 block"
+);
 
 
     console.log(

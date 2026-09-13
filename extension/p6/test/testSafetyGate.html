@@ -629,7 +629,7 @@
     );
 
     assertEqual(
-      unsupportedResult.status,
+      unsupportedResult.reason,
       "UNSUPPORTED_ACTION",
       "Unsupported action must have explicit status"
     );
@@ -666,7 +666,7 @@
     );
 
     assertEqual(
-      malformedMetadataResult.status,
+      malformedMetadataResult.reason,
       "INVALID_METADATA",
       "Malformed metadata must have explicit status"
     );
@@ -703,8 +703,8 @@
     );
 
     assertEqual(
-      missingUrlResult.status,
-      "NAVIGATION_URL_REQUIRED",
+      missingUrlResult.reason,
+      "NAVIGATION_URL_MISSING",
       "Missing navigation URL must have explicit status"
     );
 

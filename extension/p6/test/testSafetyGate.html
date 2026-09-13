@@ -22,6 +22,14 @@
     Delete Account
   </button>
 
+  <button data-agent-id="el_wireless">
+    Wireless Settings
+    </button>
+
+    <button data-agent-id="el_transfer">
+    Wire Transfer
+    </button>
+
   <input
     data-agent-id="el_new_password"
     type="password"
@@ -177,6 +185,130 @@
       "P3-sensitive target MUST be blocked"
     );
 
+    const wirelessAction = {
+    action: "click",
+    target_id: "el_wireless",
+    confidence: 0.9,
+    metadata: {}
+    };
+
+    const transferAction = {
+    action: "click",
+    target_id: "el_transfer",
+    confidence: 0.9,
+    metadata: {}
+    };
+
+    const wirelessResult =
+    evaluateAction(wirelessAction);
+
+    const transferResult =
+    evaluateAction(transferAction);
+
+    console.log(
+    "Wireless Settings:",
+    wirelessResult
+    );
+
+    console.log(
+    "Wire Transfer:",
+    transferResult
+    );
+
+    console.assert(
+    wirelessResult.decision === "EXECUTE",
+    "Wireless Settings should NOT be considered risky"
+    );
+
+    console.assert(
+    transferResult.decision === "CONFIRM",
+    "Wire Transfer should require confirmation"
+    );
+
+    const invalidClick = {
+    action: "click",
+    target_id: null,
+    confidence: 0.99,
+    metadata: {}
+    };
+
+    const invalidType = {
+    action: "type",
+    target_id: null,
+    confidence: 0.99,
+    metadata: {
+        value: "hello"
+    }
+    };
+
+    const scrollAction = {
+    action: "scroll",
+    target_id: null,
+    confidence: 0.95,
+    metadata: {
+        direction: "down",
+        amount: 500
+    }
+    };
+
+    const waitAction = {
+    action: "wait",
+    target_id: null,
+    confidence: 0.95,
+    metadata: {}
+    };
+
+    const invalidClickResult =
+    evaluateAction(invalidClick);
+
+    const invalidTypeResult =
+    evaluateAction(invalidType);
+
+    const scrollResult =
+    evaluateAction(scrollAction);
+
+    const waitResult =
+    evaluateAction(waitAction);
+
+    console.log(
+    "Click without target:",
+    invalidClickResult
+    );
+
+    console.log(
+    "Type without target:",
+    invalidTypeResult
+    );
+
+    console.log(
+    "Scroll without target:",
+    scrollResult
+    );
+
+    console.log(
+    "Wait without target:",
+    waitResult
+    );
+
+    console.assert(
+    invalidClickResult.decision === "BLOCK",
+    "Click without target MUST be blocked"
+    );
+
+    console.assert(
+    invalidTypeResult.decision === "BLOCK",
+    "Type without target MUST be blocked"
+    );
+
+    console.assert(
+    scrollResult.decision === "EXECUTE",
+    "Scroll without target should execute"
+    );
+
+    console.assert(
+    waitResult.decision === "EXECUTE",
+    "Wait without target should execute"
+    );
 
     console.log(
       "===================================="

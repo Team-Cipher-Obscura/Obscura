@@ -33,27 +33,44 @@ export function evaluateAction(agentAction) {
 
   if (!target_id) {
 
-    // Navigation changes the browser destination,
-    // so it requires user confirmation.
+    // Navigation does not target a DOM element,
+    // but it changes the browser destination.
     if (action === "navigate") {
 
-      return {
+        return {
         decision: "CONFIRM",
         status: "CONFIRMATION_REQUIRED",
         element: null,
         reason: "NAVIGATION_REQUIRES_CONFIRMATION"
-      };
+        };
     }
 
-    // wait / scroll can proceed without target resolution
-    // for the current MVP.
+
+    // These are the only actions that are allowed
+    // to operate without a target.
+    if (
+        action === "scroll" ||
+        action === "wait"
+    ) {
+
+        return {
+        decision: "EXECUTE",
+        status: "NO_TARGET_ACTION",
+        element: null,
+        reason: null
+        };
+    }
+
+
+    // click/type without a target is invalid.
+    // Never execute it.
     return {
-      decision: "EXECUTE",
-      status: "NO_TARGET_ACTION",
-      element: null,
-      reason: null
+        decision: "BLOCK",
+        status: "INVALID_ACTION",
+        element: null,
+        reason: "TARGET_ID_REQUIRED"
     };
-  }
+    }
 
 
   // --------------------------------------------------

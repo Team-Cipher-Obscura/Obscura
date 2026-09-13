@@ -41,8 +41,15 @@ const RISKY_KEYWORDS = [
 
 function getAccessibleText(element) {
 
+  // innerText can be empty when layout has not been calculated.
+  // textContent does not depend on layout, so use it as fallback.
+  const visibleText =
+    element.innerText ||
+    element.textContent ||
+    "";
+
   const parts = [
-    element.innerText,
+    visibleText,
     element.getAttribute("aria-label"),
     element.getAttribute("value"),
     element.getAttribute("title")
@@ -55,12 +62,18 @@ function getAccessibleText(element) {
     .trim();
 }
 
-
 function matchesRiskyKeyword(text) {
 
-  return RISKY_KEYWORDS.some(
-    (keyword) => text.includes(keyword)
-  );
+  return RISKY_KEYWORDS.some((keyword) => {
+
+    const escapedKeyword =
+      keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const pattern =
+      new RegExp(`\\b${escapedKeyword}\\b`, "i");
+
+    return pattern.test(text);
+  });
 }
 
 

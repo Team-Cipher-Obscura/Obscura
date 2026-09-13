@@ -1,136 +1,51 @@
-import {
-  validateAgentAction
-} from "./hardening/actionValidation.js";
+import { resolveTarget }
+  from "./targetResolver.js";
+
+import { classifyRisk }
+  from "./riskyActionRules.js";
 
 import {
-  isAllowedProtocol
-} from "./hardening/securityPolicy.js";
-
-import {
-  resolveTarget
-} from "./targetResolver.js";
-
-import {
-  isSensitiveTarget
+  isSensitive,
+  getSensitiveType
 } from "./sensitiveRegistry.js";
 
-import {
-  classifyRisk
-} from "./riskyActionRules.js";
+import { isAllowedProtocol }
+  from "./hardening/securityPolicy.js";
 
-import {
-  createExecutionResult
-} from "./executionResult.js";
+import { validateAgentAction }
+  from "./hardening/actionValidation.js";
 
-import {
-  logSafetyEvent
-} from "./logger.js";
+import { logger }
+  from "./hardening/logger.js";
 
-function validationReason(validation) {
-  if (
-    !validation ||
-    !Array.isArray(validation.errors) ||
-    validation.errors.length === 0
-  ) {
-    return "ACTION_VALIDATION_FAILED";
-  }
-
-  return validation.errors.join(", ");
-}
-
-function blocked(action, reason) {
-  return createExecutionResult({
-    status: "BLOCKED",
-    action: action?.action ?? null,
-    target_id: action?.target_id ?? null,
-    reason
-  });
-}
-
-function confirmationPending(action, reason) {
-  return createExecutionResult({
-    status: "CONFIRMATION_PENDING",
-    action: action?.action ?? null,
-    target_id: action?.target_id ?? null,
-    reason
-  });
-}
-
-function safe(action, element = null) {
-  return {
-    status: "SAFE",
-    action: action?.action ?? null,
-    target_id: action?.target_id ?? null,
-    element
-  };
-}
-
-function getSensitiveType(targetId) {
-  if (!targetId) {
-    return null;
-  }
-
-  if (
-    typeof isSensitiveTarget === "function"
-  ) {
-    const result = isSensitiveTarget(targetId);
-
-    if (result === true) {
-      return "sensitive";
-    }
-
-    if (
-      result &&
-      typeof result === "object"
-    ) {
-      return (
-        result.type ??
-        result.reason ??
-        "sensitive"
-      );
-    }
-
-    if (typeof result === "string") {
-      return result;
-    }
-  }
-
-  return null;
-}
-
-function getNavigationUrl(action) {
-  return action?.metadata?.url ?? null;
-}
-
-function validateNavigationProtocol(action) {
-  if (action.action !== "navigate") {
-    return true;
-  }
-
-  const url = getNavigationUrl(action);
-
-  if (
-    typeof url !== "string" ||
-    !url.trim()
-  ) {
-    return false;
-  }
-
-  try {
-    const parsed = new URL(url);
-    return isAllowedProtocol(
-      parsed.protocol
-    );
-  } catch {
-    return false;
-  }
-}
 
 /**
- * Evaluate an agent action without executing it.
+ * P6 Safety Gate
  *
- * confirmationGranted is intentionally passed only by the confirmation
- * approval path after a fresh safety evaluation is requested.
+ * Safety flow:
+ *
+ *   validate
+ *       ↓
+ *   navigation protocol check
+ *       ↓
+ *   target resolution
+ *       ↓
+ *   P3 sensitive hard veto
+ *       ↓
+ *   risk classification
+ *       ↓
+ *   EXECUTE / CONFIRM / BLOCK
+ *
+ * Possible decisions:
+ *
+ *   EXECUTE
+ *   CONFIRM
+ *   BLOCK
+ *
+ * The `confirmationGranted` option is used only after the user has
+ * explicitly approved a confirmation request. Even then, the complete
+ * safety evaluation is repeated with a fresh target resolution and
+ * fresh P3 sensitive state.
  */
 export function evaluateAction(
   agentAction,
@@ -138,137 +53,293 @@ export function evaluateAction(
     confirmationGranted = false
   } = {}
 ) {
+
+  // --------------------------------------------------
+  // 0. STRUCTURAL VALIDATION
+  // --------------------------------------------------
+
   const validation =
     validateAgentAction(agentAction);
 
   if (!validation.valid) {
-    const reason =
-      validationReason(validation);
 
-    logSafetyEvent(
-      "ACTION_BLOCKED",
+    const reason =
+      Array.isArray(validation.errors) &&
+      validation.errors.length > 0
+        ? validation.errors.join(", ")
+        : "ACTION_VALIDATION_FAILED";
+
+    logger.warn(
+      "P6 action blocked during validation",
       {
-        action: agentAction?.action ?? null,
+        action:
+          agentAction?.action ?? null,
         target_id:
           agentAction?.target_id ?? null,
         reason
       }
     );
 
-    return blocked(
-      agentAction,
+    return {
+      decision: "BLOCK",
+      status: "INVALID_ACTION",
+      element: null,
       reason
-    );
+    };
   }
 
+
+  const {
+    action,
+    target_id
+  } = agentAction;
+
+
+  // --------------------------------------------------
+  // 1. ACTIONS THAT DO NOT REQUIRE A DOM TARGET
+  // --------------------------------------------------
+
+  if (!target_id) {
+
+    // Navigation does not target a DOM element,
+    // but it changes the browser destination.
+    if (action === "navigate") {
+
+      const url =
+        agentAction?.metadata?.url;
+
+      let allowed = false;
+
+      if (
+        typeof url === "string" &&
+        url.trim()
+      ) {
+        try {
+          const parsedUrl =
+            new URL(url);
+
+          allowed =
+            isAllowedProtocol(
+              parsedUrl.protocol
+            );
+        } catch {
+          allowed = false;
+        }
+      }
+
+      if (!allowed) {
+
+        logger.warn(
+          "P6 navigation blocked",
+          {
+            action,
+            target_id: null,
+            reason: "UNSAFE_NAVIGATION_BLOCKED"
+          }
+        );
+
+        return {
+          decision: "BLOCK",
+          status: "UNSAFE_NAVIGATION_BLOCKED",
+          element: null,
+          reason: "UNSAFE_NAVIGATION_BLOCKED"
+        };
+      }
+
+      /*
+       * Navigation remains a confirmation-required action.
+       *
+       * On the post-approval recheck, confirmationGranted allows
+       * the already-approved navigation to proceed.
+       */
+      if (!confirmationGranted) {
+
+        logger.info(
+          "P6 navigation requires confirmation",
+          {
+            action,
+            target_id: null
+          }
+        );
+
+        return {
+          decision: "CONFIRM",
+          status: "CONFIRMATION_REQUIRED",
+          element: null,
+          reason:
+            "NAVIGATION_REQUIRES_CONFIRMATION"
+        };
+      }
+
+      return {
+        decision: "EXECUTE",
+        status: "NO_TARGET_ACTION",
+        element: null,
+        reason: null
+      };
+    }
+
+
+    // Scroll and wait are the only other actions
+    // allowed to operate without a DOM target.
+    if (
+      action === "scroll" ||
+      action === "wait"
+    ) {
+
+      return {
+        decision: "EXECUTE",
+        status: "NO_TARGET_ACTION",
+        element: null,
+        reason: null
+      };
+    }
+
+
+    // Click/type without a target is invalid.
+    // Never execute it.
+    logger.warn(
+      "P6 action missing target_id",
+      {
+        action,
+        target_id: null,
+        reason: "TARGET_ID_REQUIRED"
+      }
+    );
+
+    return {
+      decision: "BLOCK",
+      status: "INVALID_ACTION",
+      element: null,
+      reason: "TARGET_ID_REQUIRED"
+    };
+  }
+
+
+  // --------------------------------------------------
+  // 2. RESOLVE THE CURRENT TARGET
+  // --------------------------------------------------
+
+  const resolution =
+    resolveTarget(target_id);
+
+
   /*
-   * Navigation protocol enforcement is centralized through the shared
-   * security policy.
+   * IMPORTANT:
+   *
+   * resolveTarget() always returns an object:
+   *
+   * {
+   *   success,
+   *   status,
+   *   element
+   * }
+   *
+   * Do NOT do:
+   *
+   *   resolution.element ?? resolution
+   *
+   * because a failed resolution has element === null and
+   * would therefore incorrectly assign the entire resolution
+   * object as the "element".
    */
   if (
-    agentAction.action === "navigate" &&
-    !validateNavigationProtocol(agentAction)
+    !resolution ||
+    resolution.success !== true
   ) {
-    const reason =
-      "UNSAFE_NAVIGATION_BLOCKED";
 
-    logSafetyEvent(
-      "ACTION_BLOCKED",
+    const reason =
+      resolution?.status ||
+      "TARGET_COULD_NOT_BE_RESOLVED";
+
+    logger.warn(
+      "P6 target resolution failed",
       {
-        action: agentAction.action,
-        target_id:
-          agentAction.target_id ?? null,
+        action,
+        target_id,
         reason
       }
     );
 
-    return blocked(
-      agentAction,
+    return {
+      decision: "BLOCK",
+      status:
+        resolution?.status ||
+        "TARGET_COULD_NOT_BE_RESOLVED",
+      element: null,
       reason
-    );
+    };
   }
+
+
+  const element =
+    resolution.element;
+
 
   /*
-   * Navigate actions do not resolve DOM targets.
+   * A successful resolver result is required to contain
+   * an actual DOM element.
    */
-  let element = null;
+  if (!element) {
 
-  if (agentAction.action !== "navigate") {
-    const resolution =
-      resolveTarget(agentAction.target_id);
+    logger.warn(
+      "P6 resolver returned no element",
+      {
+        action,
+        target_id,
+        reason: "TARGET_COULD_NOT_BE_RESOLVED"
+      }
+    );
 
-    if (!resolution) {
-      const reason =
-        "TARGET_NOT_FOUND";
-
-      logSafetyEvent(
-        "ACTION_BLOCKED",
-        {
-          action: agentAction.action,
-          target_id:
-            agentAction.target_id ?? null,
-          reason
-        }
-      );
-
-      return blocked(
-        agentAction,
-        reason
-      );
-    }
-
-    element =
-      resolution.element ??
-      resolution;
-
-    if (!element) {
-      const reason =
-        "TARGET_NOT_FOUND";
-
-      logSafetyEvent(
-        "ACTION_BLOCKED",
-        {
-          action: agentAction.action,
-          target_id:
-            agentAction.target_id ?? null,
-          reason
-        }
-      );
-
-      return blocked(
-        agentAction,
-        reason
-      );
-    }
-
-    /*
-     * P3 sensitive state always wins over every other classification.
-     */
-    const sensitiveType =
-      getSensitiveType(
-        agentAction.target_id
-      );
-
-    if (sensitiveType) {
-      const reason =
-        `P3_SENSITIVE_TARGET:${sensitiveType}`;
-
-      logSafetyEvent(
-        "ACTION_BLOCKED",
-        {
-          action: agentAction.action,
-          target_id:
-            agentAction.target_id ?? null,
-          reason
-        }
-      );
-
-      return blocked(
-        agentAction,
-        reason
-      );
-    }
+    return {
+      decision: "BLOCK",
+      status: "TARGET_COULD_NOT_BE_RESOLVED",
+      element: null,
+      reason: "TARGET_COULD_NOT_BE_RESOLVED"
+    };
   }
+
+
+  // --------------------------------------------------
+  // 3. P3 HARD VETO
+  // --------------------------------------------------
+
+  /*
+   * P3 sensitive state always wins.
+   *
+   * This check happens after fresh target resolution and
+   * before risky-action classification.
+   */
+  if (isSensitive(target_id)) {
+
+    const sensitiveType =
+      getSensitiveType(target_id) ||
+      "unknown";
+
+    const reason =
+      `P3 flagged target as sensitive: ${sensitiveType}`;
+
+    logger.warn(
+      "P6 action blocked by P3 sensitive registry",
+      {
+        action,
+        target_id,
+        reason
+      }
+    );
+
+    return {
+      decision: "BLOCK",
+      status: "SENSITIVE_ELEMENT_BLOCKED",
+      element,
+      reason
+    };
+  }
+
+
+  // --------------------------------------------------
+  // 4. RISK CLASSIFICATION
+  // --------------------------------------------------
 
   const risk =
     classifyRisk(
@@ -276,89 +347,57 @@ export function evaluateAction(
       element
     );
 
-  /*
-   * Risk classifiers may return either a string or an object depending on
-   * the rule implementation.
-   */
-  const riskLevel =
-    typeof risk === "string"
-      ? risk
-      : risk?.level ??
-        risk?.risk ??
-        risk?.classification ??
-        "safe";
 
-  const normalizedRisk =
-    String(riskLevel).toLowerCase();
+  // --------------------------------------------------
+  // 5. CONFIRMATION REQUIRED
+  // --------------------------------------------------
 
   if (
-    normalizedRisk === "block" ||
-    normalizedRisk === "blocked" ||
-    normalizedRisk === "high"
-  ) {
-    const reason =
-      typeof risk === "object"
-        ? (
-            risk.reason ??
-            risk.code ??
-            "RISK_BLOCKED"
-          )
-        : "RISK_BLOCKED";
-
-    logSafetyEvent(
-      "ACTION_BLOCKED",
-      {
-        action: agentAction.action,
-        target_id:
-          agentAction.target_id ?? null,
-        reason
-      }
-    );
-
-    return blocked(
-      agentAction,
-      reason
-    );
-  }
-
-  if (
-    (
-      normalizedRisk === "confirm" ||
-      normalizedRisk === "confirmation" ||
-      normalizedRisk === "confirmation_required"
-    ) &&
+    risk === "CONFIRM" &&
     !confirmationGranted
   ) {
-    const reason =
-      typeof risk === "object"
-        ? (
-            risk.reason ??
-            risk.code ??
-            "CONFIRMATION_REQUIRED"
-          )
-        : "CONFIRMATION_REQUIRED";
 
-    logSafetyEvent(
-      "CONFIRMATION_REQUIRED",
+    logger.info(
+      "P6 risky action requires confirmation",
       {
-        action: agentAction.action,
-        target_id:
-          agentAction.target_id ?? null,
-        reason
+        action,
+        target_id
       }
     );
 
     return {
-      ...confirmationPending(
-        agentAction,
-        reason
-      ),
-      element
+      decision: "CONFIRM",
+      status: "CONFIRMATION_REQUIRED",
+      element,
+      reason: "RISKY_ACTION"
     };
   }
 
-  return safe(
-    agentAction,
-    element
+
+  // --------------------------------------------------
+  // 6. SAFE / CONFIRMED ACTION
+  // --------------------------------------------------
+
+  /*
+   * If confirmationGranted === true, this is the result of
+   * the complete fresh safety recheck after approval.
+   *
+   * The fresh target and fresh P3 state have already been
+   * checked above.
+   */
+  logger.debug(
+    "P6 action passed safety gate",
+    {
+      action,
+      target_id,
+      confirmationGranted
+    }
   );
+
+  return {
+    decision: "EXECUTE",
+    status: "TARGET_RESOLVED",
+    element,
+    reason: null
+  };
 }

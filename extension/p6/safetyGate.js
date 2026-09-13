@@ -230,6 +230,23 @@ export function evaluateAction(
     }
   }
 
+  // Navigation is a targetless action.
+// A non-null target_id indicates a malformed action and must
+// never be allowed to bypass navigation confirmation.
+if (
+  action === "navigate" &&
+  target_id !== null &&
+  target_id !== undefined
+) {
+  return blockResult({
+    action,
+    target_id,
+    status: "INVALID_ACTION",
+    reason:
+      "Navigate actions must not include a target_id."
+  });
+}
+
 
   // --------------------------------------------------
   // 4. Actions that do not require a DOM target

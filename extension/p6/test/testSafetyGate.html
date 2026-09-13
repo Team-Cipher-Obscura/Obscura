@@ -285,6 +285,44 @@
       "Safe navigation should enter confirmation state"
     );
 
+    // ==================================================
+// REGRESSION: navigate must not carry target_id
+// ==================================================
+
+const navigationWithTarget = {
+  action: "navigate",
+  target_id: "el_something",
+  confidence: 0.95,
+  metadata: {
+    url: "https://example.com"
+  }
+};
+
+
+const navigationWithTargetResult =
+  evaluateAction(
+    navigationWithTarget
+  );
+
+
+console.log(
+  "Navigation with stray target_id:",
+  navigationWithTargetResult
+);
+
+
+assertEqual(
+  navigationWithTargetResult.decision,
+  "BLOCK",
+  "Navigate with a target_id must be blocked"
+);
+
+assertEqual(
+  navigationWithTargetResult.status,
+  "INVALID_ACTION",
+  "Navigate with a target_id must return INVALID_ACTION"
+);
+
 
     // ==================================================
     // 7. P3 hard veto

@@ -1,6 +1,8 @@
 const { filterElements } = require("./src/filter");
 const { buildPreviousState } = require("./src/changeDetection");
 
+console.log("[P4] Listener loaded");
+
 let previousState = {};
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

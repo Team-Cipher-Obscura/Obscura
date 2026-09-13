@@ -17,12 +17,13 @@ export function processAction(agentAction) {
 
   if (safetyResult.decision === "BLOCK") {
     return {
-      status: "BLOCKED",
-      action: agentAction?.action || null,
-      target_id: agentAction?.target_id || null,
-      reason: safetyResult.reason || safetyResult.status
+        status: "BLOCKED",
+        action: agentAction?.action || null,
+        target_id: agentAction?.target_id || null,
+        reason: safetyResult.reason || null,
+        detail: safetyResult.status
     };
-  }
+    }
 
 
   // -----------------------------------------
@@ -31,12 +32,13 @@ export function processAction(agentAction) {
 
   if (safetyResult.decision === "CONFIRM") {
     return {
-      status: "CONFIRMATION_PENDING",
-      action: agentAction?.action || null,
-      target_id: agentAction?.target_id || null,
-      reason: safetyResult.reason || safetyResult.status
+        status: "CONFIRMATION_PENDING",
+        action: agentAction?.action || null,
+        target_id: agentAction?.target_id || null,
+        reason: safetyResult.reason || null,
+        detail: safetyResult.status
     };
-  }
+    }
 
 
   // -----------------------------------------
@@ -50,9 +52,29 @@ export function processAction(agentAction) {
 }
 
 //execute confirmed action
-export function executeConfirmedAction(agentAction, element) {
+export function executeConfirmedAction(agentAction) {
+  const safetyResult = evaluateAction(agentAction);
+
+  if (safetyResult.decision === "BLOCK") {
+    return {
+      status: "BLOCKED",
+      action: agentAction?.action || null,
+      target_id: agentAction?.target_id || null,
+      reason: safetyResult.reason || safetyResult.status
+    };
+  }
+
+  if (safetyResult.decision === "CONFIRM") {
+    return {
+      status: "CONFIRMATION_PENDING",
+      action: agentAction?.action || null,
+      target_id: agentAction?.target_id || null,
+      reason: "Confirmation is still required."
+    };
+  }
+
   return executeAction(
     agentAction,
-    element
+    safetyResult.element
   );
 }

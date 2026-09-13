@@ -1,5 +1,23 @@
 import { createExecutionResult } from "./executionResult.js";
 
+export function isAllowedNavigationUrl(url) {
+  if (!url) {
+    return false;
+  }
+
+  try {
+    const parsedUrl =
+      new URL(url, window.location.href);
+
+    return (
+      parsedUrl.protocol === "http:" ||
+      parsedUrl.protocol === "https:"
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function executeAction(agentAction, element) {
   if (!agentAction || typeof agentAction !== "object") {
     return createExecutionResult({
@@ -80,20 +98,41 @@ export function executeAction(agentAction, element) {
 
       element.focus();
 
-      element.value = metadata.value ?? "";
+    const value = metadata.value ?? "";
 
-      element.dispatchEvent(
-        new Event("input", {
-          bubbles: true
-        })
-      );
+    const prototype =
+    tagName === "textarea"
+        ? window.HTMLTextAreaElement.prototype
+        : window.HTMLInputElement.prototype;
 
-      element.dispatchEvent(
-        new Event("change", {
-          bubbles: true
-        })
-      );
+    const nativeSetter =
+    Object.getOwnPropertyDescriptor(
+        prototype,
+        "value"
+    )?.set;
 
+    if (!nativeSetter) {
+    return createExecutionResult({
+        status: "FAILED",
+        action,
+        target_id,
+        reason: "Could not access the native value setter."
+    });
+    }
+
+    nativeSetter.call(element, value);
+
+    element.dispatchEvent(
+    new Event("input", {
+        bubbles: true
+    })
+    );
+
+    element.dispatchEvent(
+    new Event("change", {
+        bubbles: true
+    })
+    );
       return createExecutionResult({
         status: "EXECUTED",
         action,
@@ -133,28 +172,37 @@ export function executeAction(agentAction, element) {
     // -----------------------------------------
 
     if (action === "navigate") {
+    const url = metadata.url;
 
-      const url = metadata.url;
-
-      if (!url) {
+    if (!url) {
         return createExecutionResult({
-          status: "FAILED",
-          action,
-          target_id,
-          reason: "Navigation URL is missing."
+        status: "FAILED",
+        action,
+        target_id,
+        reason: "Navigation URL is missing."
         });
-      }
+    }
 
-      window.location.href = url;
+    if (!isAllowedNavigationUrl(url)) {
+        return createExecutionResult({
+        status: "FAILED",
+        action,
+        target_id,
+        reason: "Navigation URL scheme is not allowed."
+        });
+    }
 
-      return createExecutionResult({
+    const parsedUrl =
+        new URL(url, window.location.href);
+
+    window.location.href = parsedUrl.href;
+
+    return createExecutionResult({
         status: "EXECUTED",
         action,
         target_id
-      });
+    });
     }
-
-
     // -----------------------------------------
     // 5. WAIT
     // -----------------------------------------

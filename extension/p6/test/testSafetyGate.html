@@ -46,10 +46,14 @@
   <script type="module">
 
     import {
-      evaluateAction,
-      isAllowedNavigationUrl,
-      SUPPORTED_ACTIONS
+      evaluateAction
     } from "../safetyGate.js";
+
+    import {
+      SECURITY_POLICY,
+      isSupportedAction,
+      isAllowedProtocol
+    } from "../hardening/securityPolicy.js";
 
     import {
       update
@@ -78,6 +82,7 @@
     ) {
 
       if (condition) {
+
         passed++;
 
         console.log(
@@ -85,6 +90,7 @@
         );
 
       } else {
+
         failed++;
 
         console.error(
@@ -112,6 +118,42 @@
     }
 
 
+    /*
+     * Test-only URL helper.
+     *
+     * The production navigation policy is now centralized in
+     * securityPolicy.js as isAllowedProtocol().
+     *
+     * Keep malformed-URL handling here because URL construction
+     * itself can throw.
+     */
+    function isAllowedNavigationUrlForTest(
+      url
+    ) {
+
+      if (
+        typeof url !== "string" ||
+        !url.trim()
+      ) {
+        return false;
+      }
+
+      try {
+
+        const parsedUrl =
+          new URL(url);
+
+        return isAllowedProtocol(
+          parsedUrl.protocol
+        );
+
+      } catch {
+
+        return false;
+      }
+    }
+
+
     // ==================================================
     // Load P3 sensitive-element information
     // ==================================================
@@ -124,38 +166,46 @@
     // ==================================================
 
     assert(
-      SUPPORTED_ACTIONS.has("click"),
+      isSupportedAction("click"),
       "click is supported"
     );
 
     assert(
-      SUPPORTED_ACTIONS.has("type"),
+      isSupportedAction("type"),
       "type is supported"
     );
 
     assert(
-      SUPPORTED_ACTIONS.has("scroll"),
+      isSupportedAction("scroll"),
       "scroll is supported"
     );
 
     assert(
-      SUPPORTED_ACTIONS.has("navigate"),
+      isSupportedAction("navigate"),
       "navigate is supported"
     );
 
     assert(
-      SUPPORTED_ACTIONS.has("wait"),
+      isSupportedAction("wait"),
       "wait is supported"
     );
 
     assert(
-      !SUPPORTED_ACTIONS.has("delete"),
+      !isSupportedAction("delete"),
       "delete is not a literal action type"
     );
 
     assert(
-      !SUPPORTED_ACTIONS.has("purchase"),
+      !isSupportedAction("purchase"),
       "purchase is not a literal action type"
+    );
+
+
+    assert(
+      Array.isArray(
+        SECURITY_POLICY.supportedActions
+      ),
+      "security policy exposes supported action list"
     );
 
 
@@ -285,43 +335,44 @@
       "Safe navigation should enter confirmation state"
     );
 
+
     // ==================================================
-// REGRESSION: navigate must not carry target_id
-// ==================================================
+    // REGRESSION: navigate must not carry target_id
+    // ==================================================
 
-const navigationWithTarget = {
-  action: "navigate",
-  target_id: "el_something",
-  confidence: 0.95,
-  metadata: {
-    url: "https://example.com"
-  }
-};
-
-
-const navigationWithTargetResult =
-  evaluateAction(
-    navigationWithTarget
-  );
+    const navigationWithTarget = {
+      action: "navigate",
+      target_id: "el_something",
+      confidence: 0.95,
+      metadata: {
+        url: "https://example.com"
+      }
+    };
 
 
-console.log(
-  "Navigation with stray target_id:",
-  navigationWithTargetResult
-);
+    const navigationWithTargetResult =
+      evaluateAction(
+        navigationWithTarget
+      );
 
 
-assertEqual(
-  navigationWithTargetResult.decision,
-  "BLOCK",
-  "Navigate with a target_id must be blocked"
-);
+    console.log(
+      "Navigation with stray target_id:",
+      navigationWithTargetResult
+    );
 
-assertEqual(
-  navigationWithTargetResult.status,
-  "INVALID_ACTION",
-  "Navigate with a target_id must return INVALID_ACTION"
-);
+
+    assertEqual(
+      navigationWithTargetResult.decision,
+      "BLOCK",
+      "Navigate with a target_id must be blocked"
+    );
+
+    assertEqual(
+      navigationWithTargetResult.status,
+      "INVALID_ACTION",
+      "Navigate with a target_id must return INVALID_ACTION"
+    );
 
 
     // ==================================================
@@ -797,11 +848,11 @@ assertEqual(
 
 
     // ==================================================
-    // 20. Direct URL helper checks
+    // 20. Direct centralized URL policy checks
     // ==================================================
 
     assert(
-      isAllowedNavigationUrl(
+      isAllowedNavigationUrlForTest(
         "https://example.com"
       ) === true,
       "HTTPS URL should be allowed"
@@ -809,7 +860,7 @@ assertEqual(
 
 
     assert(
-      isAllowedNavigationUrl(
+      isAllowedNavigationUrlForTest(
         "http://example.com"
       ) === true,
       "HTTP URL should be allowed"
@@ -817,7 +868,7 @@ assertEqual(
 
 
     assert(
-      isAllowedNavigationUrl(
+      isAllowedNavigationUrlForTest(
         "javascript:alert(1)"
       ) === false,
       "javascript: URL should be rejected"
@@ -825,7 +876,7 @@ assertEqual(
 
 
     assert(
-      isAllowedNavigationUrl(
+      isAllowedNavigationUrlForTest(
         "data:text/html,<h1>Hello</h1>"
       ) === false,
       "data: URL should be rejected"
@@ -833,7 +884,7 @@ assertEqual(
 
 
     assert(
-      isAllowedNavigationUrl(
+      isAllowedNavigationUrlForTest(
         "file:///etc/passwd"
       ) === false,
       "file: URL should be rejected"
@@ -841,7 +892,7 @@ assertEqual(
 
 
     assert(
-      isAllowedNavigationUrl(
+      isAllowedNavigationUrlForTest(
         "ftp://example.com"
       ) === false,
       "ftp: URL should be rejected"
@@ -849,7 +900,7 @@ assertEqual(
 
 
     assert(
-      isAllowedNavigationUrl(
+      isAllowedNavigationUrlForTest(
         ""
       ) === false,
       "Empty URL should be rejected"
@@ -857,7 +908,7 @@ assertEqual(
 
 
     assert(
-      isAllowedNavigationUrl(
+      isAllowedNavigationUrlForTest(
         "not a valid URL"
       ) === false,
       "Malformed URL should be rejected"
@@ -945,10 +996,13 @@ assertEqual(
 
 
     if (failed === 0) {
+
       console.log(
         "ALL P6 SAFETY GATE TESTS PASSED."
       );
+
     } else {
+
       console.error(
         "P6 SAFETY GATE TESTS FAILED."
       );

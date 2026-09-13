@@ -235,12 +235,29 @@ export async function processAction(
 
 
     // --------------------------------------------------
-    // 3D. EXECUTE FRESHLY RESOLVED TARGET
+    // 3D. EXECUTE ONLY ON EXPLICIT EXECUTE DECISION
     // --------------------------------------------------
 
-    return await executeAction(
+    if (
+      recheckEvaluation.decision === "EXECUTE"
+    ) {
+
+      return await executeAction(
+        agentAction,
+        recheckEvaluation.element
+      );
+    }
+
+
+    /*
+     * Fail closed.
+     *
+     * A future/unknown safety-gate decision must never
+     * accidentally fall through to execution.
+     */
+    return blockedResult(
       agentAction,
-      recheckEvaluation.element
+      "UNKNOWN_SAFETY_DECISION"
     );
   }
 

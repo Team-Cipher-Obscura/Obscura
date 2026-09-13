@@ -11,6 +11,91 @@ import {
 
 
 /**
+ * P5 is only allowed to emit these action types.
+ *
+ * Do not add semantic actions such as:
+ * delete | purchase | submit | pay
+ *
+ * Those are represented by the risk of a resolved DOM target,
+ * not by the action type itself.
+ */
+export const SUPPORTED_ACTIONS = new Set([
+  "click",
+  "type",
+  "scroll",
+  "navigate",
+  "wait"
+]);
+
+
+/**
+ * Navigation is deliberately restricted to HTTP(S).
+ *
+ * This is a safety-gate check, not merely an executor check.
+ * The executor has its own defense-in-depth validation too.
+ */
+export function isAllowedNavigationUrl(url) {
+  if (
+    typeof url !== "string" ||
+    !url.trim()
+  ) {
+    return false;
+  }
+
+  try {
+    const parsedUrl =
+      new URL(
+        url,
+        window.location.href
+      );
+
+    return (
+      parsedUrl.protocol === "http:" ||
+      parsedUrl.protocol === "https:"
+    );
+  } catch {
+    return false;
+  }
+}
+
+
+/**
+ * Metadata must be an object.
+ *
+ * null, arrays, strings, numbers, booleans, etc.
+ * are not valid P5 metadata.
+ */
+function isValidMetadata(metadata) {
+  return (
+    metadata !== null &&
+    typeof metadata === "object" &&
+    !Array.isArray(metadata)
+  );
+}
+
+
+/**
+ * Standard safety-gate BLOCK result.
+ */
+function blockResult({
+  action = null,
+  target_id = null,
+  status,
+  reason,
+  element = null
+}) {
+  return {
+    decision: "BLOCK",
+    status,
+    element,
+    reason,
+    action,
+    target_id
+  };
+}
+
+
+/**
  * Main P6 safety decision.
  *
  * Possible decisions:
@@ -19,19 +104,20 @@ import {
  * CONFIRM
  * BLOCK
  *
- * confirmationGranted is ONLY used after the user has
- * explicitly approved a confirmation request.
+ * Phase 4 confirmation flow calls this gate again with:
  *
- * It does NOT bypass:
+ *   { confirmationGranted: true }
+ *
+ * That second evaluation is still performed from scratch:
+ * - action validation
+ * - metadata validation
+ * - navigation validation
  * - target resolution
- * - visibility checks
- * - disabled checks
- * - covered-target checks
- * - P3 sensitive checks
- * - action/risk classification
+ * - P3 sensitive check
+ * - risk classification
  *
- * Therefore a post-confirmation evaluation is still a
- * complete fresh safety evaluation.
+ * The confirmation flag only means the user has already approved
+ * the previously classified risky action. It does NOT bypass safety.
  */
 export function evaluateAction(
   agentAction,
@@ -40,46 +126,128 @@ export function evaluateAction(
   } = {}
 ) {
 
-  // -----------------------------------------
-  // 0. Validate action object
-  // -----------------------------------------
+  // --------------------------------------------------
+  // 0. Basic action-object validation
+  // --------------------------------------------------
 
   if (
     !agentAction ||
     typeof agentAction !== "object" ||
     Array.isArray(agentAction)
   ) {
-    return {
-      decision: "BLOCK",
+    return blockResult({
       status: "INVALID_ACTION",
-      element: null,
       reason: "ACTION_OBJECT_REQUIRED"
-    };
+    });
   }
 
 
   const {
     action,
-    target_id
+    target_id,
+    metadata
   } = agentAction;
 
 
-  // -----------------------------------------
-  // 1. Actions without DOM targets
-  // -----------------------------------------
+  // --------------------------------------------------
+  // 1. Action-type allowlist
+  // --------------------------------------------------
+
+  if (
+    typeof action !== "string" ||
+    !SUPPORTED_ACTIONS.has(action)
+  ) {
+    return blockResult({
+      action:
+        typeof action === "string"
+          ? action
+          : null,
+      target_id:
+        typeof target_id === "string"
+          ? target_id
+          : null,
+      status: "UNSUPPORTED_ACTION",
+      reason:
+        `Unsupported action type: ${String(action)}`
+    });
+  }
+
+
+  // --------------------------------------------------
+  // 2. Metadata shape validation
+  // --------------------------------------------------
+
+  if (!isValidMetadata(metadata)) {
+    return blockResult({
+      action,
+      target_id:
+        typeof target_id === "string"
+          ? target_id
+          : null,
+      status: "INVALID_METADATA",
+      reason: "ACTION_METADATA_MUST_BE_AN_OBJECT"
+    });
+  }
+
+
+  // --------------------------------------------------
+  // 3. Navigation-specific validation
+  //
+  // IMPORTANT:
+  // This happens BEFORE confirmation.
+  //
+  // Therefore javascript:, data:, file:, ftp:, malformed
+  // and missing URLs are BLOCKED immediately rather than
+  // presented to the user for approval.
+  // --------------------------------------------------
+
+  if (action === "navigate") {
+
+    const url = metadata.url;
+
+
+    if (
+      typeof url !== "string" ||
+      !url.trim()
+    ) {
+      return blockResult({
+        action,
+        target_id: null,
+        status: "NAVIGATION_URL_REQUIRED",
+        reason: "Navigation URL is required."
+      });
+    }
+
+
+    if (!isAllowedNavigationUrl(url)) {
+      return blockResult({
+        action,
+        target_id: null,
+        status: "UNSAFE_NAVIGATION_BLOCKED",
+        reason:
+          "Navigation URL scheme is not allowed."
+      });
+    }
+  }
+
+
+  // --------------------------------------------------
+  // 4. Actions that do not require a DOM target
+  // --------------------------------------------------
 
   if (!target_id) {
 
-    // Navigation changes browser destination and
-    // therefore always requires confirmation.
+    // Navigation has already passed its URL validation.
+    //
+    // It changes browser destination, so it requires
+    // confirmation unless the caller is performing the
+    // second, post-approval safety evaluation.
     if (action === "navigate") {
 
-      if (
-        confirmationGranted
-      ) {
+      if (confirmationGranted) {
         return {
           decision: "EXECUTE",
-          status: "CONFIRMED_NAVIGATION",
+          status: "NO_TARGET_ACTION",
           element: null,
           reason: null
         };
@@ -89,13 +257,12 @@ export function evaluateAction(
         decision: "CONFIRM",
         status: "CONFIRMATION_REQUIRED",
         element: null,
-        reason:
-          "NAVIGATION_REQUIRES_CONFIRMATION"
+        reason: "NAVIGATION_REQUIRES_CONFIRMATION"
       };
     }
 
 
-    // Scroll and wait are allowed without a target.
+    // These actions are explicitly allowed without a target.
     if (
       action === "scroll" ||
       action === "wait"
@@ -109,63 +276,61 @@ export function evaluateAction(
     }
 
 
-    // Click/type without a target are invalid.
-    return {
-      decision: "BLOCK",
+    // click/type require a DOM target.
+    return blockResult({
+      action,
+      target_id: null,
       status: "INVALID_ACTION",
-      element: null,
       reason: "TARGET_ID_REQUIRED"
-    };
+    });
   }
 
 
-  // -----------------------------------------
-  // 2. Resolve target FRESH
-  // -----------------------------------------
+  // --------------------------------------------------
+  // 5. Resolve the current live target
+  //
+  // This is deliberately performed every time evaluateAction()
+  // is called. Phase 4 therefore gets fresh target resolution
+  // after confirmation.
+  // --------------------------------------------------
 
   const resolution =
     resolveTarget(target_id);
 
 
   if (!resolution.success) {
-    return {
-      decision: "BLOCK",
+    return blockResult({
+      action,
+      target_id,
       status: resolution.status,
-      element: null,
-      reason:
-        "TARGET_COULD_NOT_BE_RESOLVED"
-    };
+      reason: "TARGET_COULD_NOT_BE_RESOLVED"
+    });
   }
 
 
-  // -----------------------------------------
-  // 3. P3 HARD VETO
-  // -----------------------------------------
+  // --------------------------------------------------
+  // 6. P3 HARD VETO
   //
-  // This check happens EVERY time this function
-  // is called, including after confirmation.
-  //
-  // Therefore a P3 update made while the confirmation
-  // dialog is open wins over a previous approval.
-  //
+  // This always wins, including after confirmation.
+  // --------------------------------------------------
 
   if (isSensitive(target_id)) {
-    return {
-      decision: "BLOCK",
+    return blockResult({
+      action,
+      target_id,
       status: "SENSITIVE_ELEMENT_BLOCKED",
       element: resolution.element,
       reason:
         `P3 flagged target as sensitive: ${
-          getSensitiveType(target_id) ||
-          "unknown"
+          getSensitiveType(target_id) || "unknown"
         }`
-    };
+    });
   }
 
 
-  // -----------------------------------------
-  // 4. Risk classification
-  // -----------------------------------------
+  // --------------------------------------------------
+  // 7. Risk classification
+  // --------------------------------------------------
 
   const risk =
     classifyRisk(
@@ -174,21 +339,25 @@ export function evaluateAction(
     );
 
 
-  // -----------------------------------------
-  // 5. Confirmation
-  // -----------------------------------------
+  // --------------------------------------------------
+  // 8. Confirmation required
+  //
+  // On the initial evaluation:
+  //   risky action -> CONFIRM
+  //
+  // On the post-approval evaluation:
+  //   risky action + confirmationGranted -> EXECUTE
+  //
+  // Importantly, confirmationGranted does NOT skip any
+  // validation above.
+  // --------------------------------------------------
 
   if (risk === "CONFIRM") {
 
-    // A user approval satisfies only the
-    // confirmation requirement.
-    //
-    // All checks above have still been performed
-    // against the current page state.
     if (confirmationGranted) {
       return {
         decision: "EXECUTE",
-        status: "CONFIRMED_ACTION",
+        status: "CONFIRMATION_GRANTED",
         element: resolution.element,
         reason: null
       };
@@ -203,9 +372,9 @@ export function evaluateAction(
   }
 
 
-  // -----------------------------------------
-  // 6. SAFE
-  // -----------------------------------------
+  // --------------------------------------------------
+  // 9. Safe action
+  // --------------------------------------------------
 
   return {
     decision: "EXECUTE",

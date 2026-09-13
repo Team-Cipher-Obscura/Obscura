@@ -36,6 +36,8 @@ def validate_metadata_shape(action) -> None:
         raise VLMOutputError("navigate action missing required metadata.url")
     if action.action == "scroll" and ("direction" not in meta or "amount" not in meta):
         raise VLMOutputError("scroll action missing required metadata.direction/amount")
+    if action.action == "done" and action.target_id is not None:
+        raise VLMOutputError("done action must not include a target_id")
 
 def parse_and_validate(raw_text: str, elements: list[Element]) -> AgentResponse:
     valid_element_ids = {e.id for e in elements}
@@ -57,4 +59,10 @@ def parse_and_validate(raw_text: str, elements: list[Element]) -> AgentResponse:
         )
 
     validate_metadata_shape(action)
+
+    if action.action == "done":
+        # P1 matches on a stable string, not whatever free-form text the VLM wrote —
+        # normalize it here so the contract holds regardless of model output.
+        action.metadata = {"reason": "task_completed"}
+
     return action

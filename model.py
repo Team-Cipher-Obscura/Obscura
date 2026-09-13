@@ -33,7 +33,7 @@ class AgentRequest(BaseModel):
         return v
 
 class AgentResponse(BaseModel):
-    action: Literal["click", "type", "scroll", "navigate", "wait"]
+    action: Literal["click", "type", "scroll", "navigate", "wait","done"]
     target_id: Optional[str] = None
     confidence: float
     metadata: dict = {}

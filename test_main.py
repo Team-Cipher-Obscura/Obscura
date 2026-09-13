@@ -56,6 +56,29 @@ def test_type_on_sensitive_field_is_blocked():
     assert body["metadata"].get("reason") == "sensitive_field_requires_user"
 
 
+def test_done_action_normalizes_metadata_and_clears_target():
+    fake_response = '{"action": "done", "target_id": null, "confidence": 0.95, "metadata": {"reason": "looks finished"}}'
+    with patch("main.call_vlm", return_value=fake_response):
+        resp = client.post("/agent/reason", json=VALID_PAYLOAD)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["action"] == "done"
+    assert body["target_id"] is None
+    # normalized to the stable string P1 matches on, regardless of what the VLM wrote
+    assert body["metadata"] == {"reason": "task_completed"}
+
+
+def test_done_action_with_target_id_is_rejected():
+    # A "done" action must not carry a target_id — this is malformed VLM output,
+    # so it follows the same path as any other invalid shape: 502, not a silent wait.
+    fake_response = '{"action": "done", "target_id": "el_b02e7d", "confidence": 0.9, "metadata": {}}'
+    with patch("main.call_vlm", return_value=fake_response):
+        resp = client.post("/agent/reason", json=VALID_PAYLOAD)
+
+    assert resp.status_code == 502
+
+
 def test_all_unchanged_skips_vlm_call():
     payload = {
         "task": "Find Mumbai flight",

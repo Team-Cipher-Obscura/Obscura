@@ -1,72 +1,99 @@
-/**
- * P6 Action Boundary Validation
- *
- * This validates the shape of P5's response before it reaches
- * safety classification.
- *
- * It does NOT decide whether an action is risky.
- * That remains the responsibility of safetyGate.js.
- */
-
 import {
-  SECURITY_POLICY,
   isSupportedAction
 } from "./securityPolicy.js";
 
 
-function invalid(
-  reason
-) {
-  return {
-    valid: false,
-    reason
-  };
-}
-
-
-function valid() {
-  return {
-    valid: true,
-    reason: null
-  };
-}
-
-
+/**
+ * Validate the structural shape of a P5 AgentResponse.
+ *
+ * This function is intentionally non-throwing.
+ *
+ * safetyGate.js is the authoritative caller and decides
+ * whether the invalid action becomes a BLOCK result.
+ */
 export function validateAgentAction(
   action
 ) {
+  const errors = [];
+
+
+  /*
+   * ---------------------------------------------
+   * Top-level object
+   * ---------------------------------------------
+   */
+
   if (
     !action ||
     typeof action !== "object" ||
     Array.isArray(action)
   ) {
-    return invalid(
-      "ACTION_OBJECT_REQUIRED"
-    );
+    return {
+      valid: false,
+
+      errors: [
+        "ACTION_MUST_BE_OBJECT"
+      ]
+    };
   }
 
 
+  /*
+   * ---------------------------------------------
+   * Action type
+   * ---------------------------------------------
+   */
+
   if (
+    typeof action.action !== "string" ||
+    action.action.trim() === ""
+  ) {
+    errors.push(
+      "ACTION_TYPE_REQUIRED"
+    );
+  } else if (
     !isSupportedAction(
       action.action
     )
   ) {
-    return invalid(
+    errors.push(
       "UNSUPPORTED_ACTION"
     );
   }
 
 
+  /*
+   * ---------------------------------------------
+   * target_id
+   *
+   * P5 uses:
+   *
+   *   string target_id
+   *   null target_id
+   *
+   * Empty strings are not valid targets.
+   * ---------------------------------------------
+   */
+
   if (
     action.target_id !== null &&
     action.target_id !== undefined &&
-    typeof action.target_id !== "string"
+    (
+      typeof action.target_id !== "string" ||
+      action.target_id.trim() === ""
+    )
   ) {
-    return invalid(
+    errors.push(
       "INVALID_TARGET_ID"
     );
   }
 
+
+  /*
+   * ---------------------------------------------
+   * confidence
+   * ---------------------------------------------
+   */
 
   if (
     action.confidence !== undefined &&
@@ -79,11 +106,19 @@ export function validateAgentAction(
       action.confidence > 1
     )
   ) {
-    return invalid(
+    errors.push(
       "INVALID_CONFIDENCE"
     );
   }
 
+
+  /*
+   * ---------------------------------------------
+   * metadata
+   *
+   * metadata must be a plain object when supplied.
+   * ---------------------------------------------
+   */
 
   if (
     action.metadata !== undefined &&
@@ -93,78 +128,85 @@ export function validateAgentAction(
       Array.isArray(action.metadata)
     )
   ) {
-    return invalid(
+    errors.push(
       "INVALID_METADATA"
     );
   }
 
 
-  const metadata =
-    action.metadata || {};
-
+  /*
+   * ---------------------------------------------
+   * Navigation-specific shape
+   * ---------------------------------------------
+   */
 
   if (
     action.action === "navigate"
   ) {
-
+    /*
+     * Navigation actions must not carry a DOM target.
+     *
+     * The safety gate also enforces this as a hard safety
+     * condition. Keeping the structural validation here
+     * makes malformed navigation actions fail early.
+     */
     if (
       action.target_id !== null &&
       action.target_id !== undefined
     ) {
-      return invalid(
-        "NAVIGATION_TARGET_ID_FORBIDDEN"
+      errors.push(
+        "NAVIGATE_TARGET_ID_NOT_ALLOWED"
       );
     }
 
 
+    const url =
+      action.metadata?.url;
+
+
     if (
-      typeof metadata.url !== "string" ||
-      !metadata.url.trim()
+      typeof url !== "string" ||
+      url.trim() === ""
     ) {
-      return invalid(
+      errors.push(
         "NAVIGATION_URL_REQUIRED"
       );
     }
   }
 
 
-  if (
-    action.action === "type" &&
-    action.target_id === null
-  ) {
-    return invalid(
-      "TYPE_TARGET_REQUIRED"
-    );
-  }
-
+  /*
+   * ---------------------------------------------
+   * Target-required actions
+   * ---------------------------------------------
+   */
 
   if (
-    action.action === "click" &&
-    action.target_id === null
+    (
+      action.action === "click" ||
+      action.action === "type"
+    ) &&
+    (
+      typeof action.target_id !== "string" ||
+      action.target_id.trim() === ""
+    )
   ) {
-    return invalid(
-      "CLICK_TARGET_REQUIRED"
+    errors.push(
+      "TARGET_ID_REQUIRED"
     );
   }
 
 
-  return valid();
-}
+  /*
+   * ---------------------------------------------
+   * Result
+   * ---------------------------------------------
+   */
 
+  return {
+    valid:
+      errors.length === 0,
 
-export function assertValidAgentAction(
-  action
-) {
-  const result =
-    validateAgentAction(
-      action
-    );
-
-  if (!result.valid) {
-    throw new Error(
-      result.reason
-    );
-  }
-
-  return action;
+    errors
+  };
 }

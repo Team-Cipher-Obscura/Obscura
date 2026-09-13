@@ -27,33 +27,29 @@ function getDefaultSendMessage() {
 }
 
 
-/**
- * Create the standard blocked result used by the pipeline.
- */
 function blockedResult(
   agentAction,
   safetyResult
 ) {
   return {
     status: "BLOCKED",
+
     action:
       agentAction?.action || null,
+
     target_id:
       agentAction?.target_id || null,
+
     reason:
-      safetyResult?.reason || null,
+      safetyResult?.reason ||
+      "SAFETY_BLOCKED",
+
     detail:
       safetyResult?.status || null
   };
 }
 
 
-/**
- * Create the standard confirmation-pending result.
- *
- * This is retained as a defensive result for callers that invoke
- * executeConfirmedAction() incorrectly or for future integrations.
- */
 function confirmationPendingResult(
   agentAction,
   safetyResult,
@@ -61,14 +57,18 @@ function confirmationPendingResult(
 ) {
   return {
     status: "CONFIRMATION_PENDING",
+
     action:
       agentAction?.action || null,
+
     target_id:
       agentAction?.target_id || null,
+
     reason:
       reason ||
       safetyResult?.reason ||
-      null,
+      "CONFIRMATION_REQUIRED",
+
     detail:
       safetyResult?.status || null
   };
@@ -76,64 +76,55 @@ function confirmationPendingResult(
 
 
 /**
- * Process a P5 agent action through the complete P6 pipeline.
+ * Process a P5 AgentResponse through the complete P6
+ * safety and execution pipeline.
  *
- * IMPORTANT:
+ * Risky actions:
  *
- * processAction() is asynchronous because risky actions may require
- * user confirmation.
- *
- * The optional sendMessage parameter exists specifically so tests
- * and extension integrations can provide the Phase 4 message sender.
- *
- * processAction(action, sendMessage)
- *
- * Flow:
- *
- *   action
- *     ↓
- *   safety gate
- *     ↓
- *   BLOCK --------------------> blocked
- *     ↓
+ *   evaluate
+ *      ↓
  *   CONFIRM
- *     ↓
- *   confirmation request
- *     ↓
- *   user approval
- *     ↓
- *   SAFETY GATE AGAIN
- *     ↓
- *   fresh target resolution
- *     ↓
- *   fresh P3 sensitive check
- *     ↓
- *   fresh risk classification
- *     ↓
+ *      ↓
+ *   requestConfirmation
+ *      ↓
+ *   user response
+ *      ↓
+ *   FRESH evaluate with confirmationGranted=true
+ *      ↓
  *   execute
+ *
+ * The second evaluation is deliberately required because
+ * the DOM and P3 sensitive map can change while the user
+ * is deciding.
  */
 export async function processAction(
   agentAction,
   sendMessage = getDefaultSendMessage()
 ) {
-  // -----------------------------------------
-  // 0. Confirmation message listener
-  // -----------------------------------------
-
+  /*
+   * Ensure the browser-level confirmation response listener
+   * is registered before a confirmation request can be made.
+   */
   registerConfirmationMessageListener();
 
 
-  // -----------------------------------------
-  // 1. Initial safety gate
-  // -----------------------------------------
+  /*
+   * ---------------------------------------------
+   * FIRST SAFETY EVALUATION
+   * ---------------------------------------------
+   */
 
   const safetyResult =
-    evaluateAction(agentAction);
+    evaluateAction(
+      agentAction
+    );
 
 
-  // -----------------------------------------
-  // 2. HARD BLOCK
-  // -----------------------------------------
+  /*
+   * ---------------------------------------------
+   * HARD BLOCK
+   * ---------------------------------------------
+   */
 
   if (
     safetyResult.decision === "BLOCK"
@@ -145,23 +136,35 @@ export async function processAction(
   }
 
 
-  // -----------------------------------------
-  // 3. CONFIRMATION REQUIRED
-  // -----------------------------------------
+  /*
+   * ---------------------------------------------
+   * CONFIRMATION
+   * ---------------------------------------------
+   */
 
   if (
     safetyResult.decision === "CONFIRM"
   ) {
-    if (typeof sendMessage !== "function") {
+    if (
+      typeof sendMessage !== "function"
+    ) {
       return {
-        ...confirmationPendingResult(
-          agentAction,
-          safetyResult,
-          "Confirmation transport is unavailable."
-        ),
-        status: "FAILED"
+        status: "FAILED",
+
+        action:
+          agentAction?.action || null,
+
+        target_id:
+          agentAction?.target_id || null,
+
+        reason:
+          "Confirmation transport is unavailable.",
+
+        detail:
+          "CONFIRMATION_TRANSPORT_UNAVAILABLE"
       };
     }
+
 
     let confirmationPayload;
 
@@ -174,13 +177,17 @@ export async function processAction(
     } catch (error) {
       return {
         status: "FAILED",
+
         action:
           agentAction?.action || null,
+
         target_id:
           agentAction?.target_id || null,
+
         reason:
           error?.message ||
           "Could not build confirmation request.",
+
         detail:
           "CONFIRMATION_PAYLOAD_ERROR"
       };
@@ -199,41 +206,76 @@ export async function processAction(
       });
 
 
-    // -----------------------------------------
-    // 4. USER REJECTED / TIMEOUT
-    // -----------------------------------------
+    /*
+     * -------------------------------------------
+     * USER REJECTED / TIMEOUT
+     * -------------------------------------------
+     */
 
     if (!approved) {
       return {
         status: "BLOCKED",
+
         action:
           agentAction?.action || null,
+
         target_id:
           agentAction?.target_id || null,
+
         reason:
           "CONFIRMATION_REJECTED",
+
         detail:
           "CONFIRMATION_DENIED"
       };
     }
 
 
-    // -----------------------------------------
-    // 5. TOCTOU RECHECK
-    //
-    // DO NOT reuse safetyResult.element.
-    // The DOM and P3 sensitive map may have changed
-    // while the confirmation dialog was open.
-    // -----------------------------------------
-
+    /*
+     * -------------------------------------------
+     * CRITICAL PHASE 6 FIX
+     * -------------------------------------------
+     *
+     * The action has now been explicitly approved by
+     * the user.
+     *
+     * BUT we must NOT reuse the previous safety result.
+     *
+     * The DOM and P3 sensitive map may have changed.
+     *
+     * Therefore run the safety gate again.
+     *
+     * confirmationGranted=true tells safetyGate that this
+     * specific action has already received confirmation,
+     * allowing a previously-CONFIRM action to proceed to
+     * execution after all other safety checks pass.
+     *
+     * Without this flag:
+     *
+     *   CONFIRM
+     *      ↓
+     *   approve
+     *      ↓
+     *   evaluateAction()
+     *      ↓
+     *   CONFIRM again
+     *
+     * which makes every risky action permanently
+     * CONFIRMATION_PENDING.
+     */
     const recheckResult =
-      evaluateAction(agentAction);
+      evaluateAction(
+        agentAction,
+        {
+          confirmationGranted: true
+        }
+      );
 
 
-    // -----------------------------------------
-    // 6. Fresh safety block wins
-    // -----------------------------------------
-
+    /*
+     * A new hard safety violation always wins over
+     * the previous user approval.
+     */
     if (
       recheckResult.decision === "BLOCK"
     ) {
@@ -244,11 +286,14 @@ export async function processAction(
     }
 
 
-    // -----------------------------------------
-    // 7. A confirmed action must not silently
-    //    bypass a new confirmation requirement.
-    // -----------------------------------------
-
+    /*
+     * In normal operation a correctly implemented
+     * confirmationGranted path should not return CONFIRM.
+     *
+     * Keep this defensive branch so a future safety-rule
+     * change cannot silently execute an action that has
+     * acquired a NEW confirmation requirement.
+     */
     if (
       recheckResult.decision === "CONFIRM"
     ) {
@@ -260,10 +305,12 @@ export async function processAction(
     }
 
 
-    // -----------------------------------------
-    // 8. EXECUTE USING FRESH TARGET
-    // -----------------------------------------
-
+    /*
+     * Execute using the element obtained by the FRESH
+     * safety evaluation.
+     *
+     * Never use safetyResult.element from before confirmation.
+     */
     return executeAction(
       agentAction,
       recheckResult.element
@@ -271,9 +318,11 @@ export async function processAction(
   }
 
 
-  // -----------------------------------------
-  // 9. SAFE EXECUTION
-  // -----------------------------------------
+  /*
+   * ---------------------------------------------
+   * SAFE ACTION
+   * ---------------------------------------------
+   */
 
   return executeAction(
     agentAction,
@@ -283,19 +332,19 @@ export async function processAction(
 
 
 /**
- * Backward-compatible helper retained for callers/tests that
- * explicitly separate confirmation from execution.
+ * Backward-compatible helper.
  *
- * This function does NOT approve confirmation itself.
- *
- * It performs a fresh safety evaluation and only executes when
- * the action is currently safe.
+ * This helper intentionally does not manufacture confirmation.
+ * If the action currently requires confirmation, it reports
+ * CONFIRMATION_PENDING.
  */
 export function executeConfirmedAction(
   agentAction
 ) {
   const safetyResult =
-    evaluateAction(agentAction);
+    evaluateAction(
+      agentAction
+    );
 
 
   if (

@@ -26,7 +26,7 @@ app.add_middleware(
 def root():
     return {"status": "ok"}
 
-CONFIDENCE_THRESHOLD = 0.3
+CONFIDENCE_THRESHOLD = 0.5
 
 @app.post("/agent/reason", response_model=AgentResponse)
 def reason(payload: AgentRequest):

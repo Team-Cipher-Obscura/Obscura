@@ -9,6 +9,7 @@
 
   <h1>P6 Confirmation Flow Test</h1>
 
+
   <script type="module">
 
     import {
@@ -18,16 +19,13 @@
     } from "../confirmationFlow.js";
 
 
-    // -----------------------------------------
-    // Mock message sender
-    // -----------------------------------------
-
     const sentMessages = [];
+
 
     function sendMessage(message) {
 
       console.log(
-        "P6 → P1:",
+        "P6 -> P1:",
         message
       );
 
@@ -36,7 +34,7 @@
 
 
     // -----------------------------------------
-    // Start confirmation request
+    // 1. APPROVAL
     // -----------------------------------------
 
     const confirmationPromise =
@@ -50,7 +48,8 @@
           metadata: {}
         },
 
-        targetSummary: "Delete Account"
+        targetSummary:
+          "Delete Account"
       });
 
 
@@ -59,10 +58,6 @@
       "One confirmation should be pending"
     );
 
-
-    // -----------------------------------------
-    // Check message sent to P1
-    // -----------------------------------------
 
     console.assert(
       sentMessages.length === 1,
@@ -75,7 +70,8 @@
 
 
     console.assert(
-      request.type === "P6_CONFIRMATION_REQUEST",
+      request.type ===
+        "P6_CONFIRMATION_REQUEST",
       "Wrong confirmation message type"
     );
 
@@ -86,18 +82,9 @@
     );
 
 
-    console.log(
-      "Confirmation request:",
-      request
-    );
-
-
-    // -----------------------------------------
-    // Simulate P1 → P6 approval
-    // -----------------------------------------
-
     handleConfirmationResponse({
-      type: "P6_CONFIRMATION_RESPONSE",
+      type:
+        "P6_CONFIRMATION_RESPONSE",
 
       requestId:
         request.requestId,
@@ -110,12 +97,6 @@
       await confirmationPromise;
 
 
-    console.log(
-      "User approval:",
-      approved
-    );
-
-
     console.assert(
       approved === true,
       "Approval should resolve to true"
@@ -124,86 +105,166 @@
 
     console.assert(
       _pendingCountForTesting() === 0,
-      "Pending confirmation should be removed"
+      "Approved confirmation should be removed"
     );
 
 
-    //rejection test
+    // -----------------------------------------
+    // 2. REJECTION
+    // -----------------------------------------
+
     const rejectionPromise =
-    requestConfirmation({
+      requestConfirmation({
         sendMessage,
 
         action: {
-        action: "click",
-        target_id: "el_delete",
-        confidence: 0.95,
-        metadata: {}
+          action: "click",
+          target_id: "el_delete",
+          confidence: 0.95,
+          metadata: {}
         },
 
-        targetSummary: "Delete Account"
-    });
+        targetSummary:
+          "Delete Account"
+      });
+
 
     const rejectionRequest =
-    sentMessages[sentMessages.length - 1];
+      sentMessages[
+        sentMessages.length - 1
+      ];
+
 
     handleConfirmationResponse({
-    type: "P6_CONFIRMATION_RESPONSE",
-    requestId: rejectionRequest.requestId,
-    approved: false
+      type:
+        "P6_CONFIRMATION_RESPONSE",
+
+      requestId:
+        rejectionRequest.requestId,
+
+      approved: false
     });
+
 
     const rejected =
-    await rejectionPromise;
+      await rejectionPromise;
 
-    console.log(
-    "User rejection:",
-    rejected
-    );
 
     console.assert(
-    rejected === false,
-    "Rejection should resolve to false"
+      rejected === false,
+      "Rejection should resolve to false"
     );
+
 
     console.assert(
-    _pendingCountForTesting() === 0,
-    "Rejected confirmation should be removed"
+      _pendingCountForTesting() === 0,
+      "Rejected confirmation should be removed"
     );
 
-    //timeout test
-    const timeoutPromise =
-    requestConfirmation({
-        sendMessage,
-        action: {
-        action: "click",
-        target_id: "el_delete",
-        confidence: 0.95,
-        metadata: {}
-        },
-        targetSummary: "Delete Account"
+
+    // -----------------------------------------
+    // 3. UNKNOWN REQUEST ID
+    // -----------------------------------------
+
+    handleConfirmationResponse({
+      type:
+        "P6_CONFIRMATION_RESPONSE",
+
+      requestId:
+        "does-not-exist",
+
+      approved: true
     });
 
+
+    console.assert(
+      _pendingCountForTesting() === 0,
+      "Unknown confirmation response must be ignored"
+    );
+
+
+    // -----------------------------------------
+    // 4. INVALID MESSAGE
+    // -----------------------------------------
+
+    handleConfirmationResponse({
+      type: "UNRELATED_MESSAGE",
+      requestId: "anything",
+      approved: true
+    });
+
+
+    console.assert(
+      _pendingCountForTesting() === 0,
+      "Unrelated messages must be ignored"
+    );
+
+
+    // -----------------------------------------
+    // 5. TIMEOUT
+    // -----------------------------------------
+    //
+    // Use a short timeout only for this test.
+    // Production processAction() continues to use
+    // the 30-second default.
+    //
+
+    const timeoutPromise =
+      requestConfirmation({
+        sendMessage,
+
+        action: {
+          action: "click",
+          target_id: "el_delete",
+          confidence: 0.95,
+          metadata: {}
+        },
+
+        targetSummary:
+          "Delete Account",
+
+        timeoutMs: 10
+      });
+
+
+    console.assert(
+      _pendingCountForTesting() === 1,
+      "Timeout request should be pending"
+    );
+
+
     const timeoutResult =
-    await timeoutPromise;
+      await timeoutPromise;
 
-    console.log("Confirmation timeout:", timeoutResult);
 
-    console.assert(
-    timeoutResult === false,
-    "Timeout should resolve to false"
+    console.log(
+      "Confirmation timeout:",
+      timeoutResult
     );
 
+
     console.assert(
-    _pendingCountForTesting() === 0,
-    "Timed-out confirmation should be removed"
+      timeoutResult === false,
+      "Timeout should resolve to false"
     );
+
+
+    console.assert(
+      _pendingCountForTesting() === 0,
+      "Timed-out confirmation should be removed"
+    );
+
+
+    // -----------------------------------------
+    // COMPLETE
+    // -----------------------------------------
 
     console.log(
       "===================================="
     );
 
     console.log(
-      "P6 Confirmation Flow test completed."
+      "P6 Confirmation Flow tests completed."
     );
 
     console.log(

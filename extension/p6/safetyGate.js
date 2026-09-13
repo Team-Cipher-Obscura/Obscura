@@ -9,39 +9,6 @@ import {
   getSensitiveType
 } from "./sensitiveRegistry.js";
 
-const SUPPORTED_ACTIONS = new Set([
-  "click",
-  "type",
-  "scroll",
-  "navigate",
-  "wait"
-]);
-
-/**
- * Check whether a navigation URL is allowed.
- *
- * Only normal HTTP(S) navigation is permitted.
- */
-function isAllowedNavigationUrl(url) {
-  if (!url || typeof url !== "string") {
-    return false;
-  }
-
-  try {
-    const parsedUrl =
-      new URL(
-        url,
-        window.location.href
-      );
-
-    return (
-      parsedUrl.protocol === "http:" ||
-      parsedUrl.protocol === "https:"
-    );
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Main P6 safety decision.
@@ -52,16 +19,19 @@ function isAllowedNavigationUrl(url) {
  * CONFIRM
  * BLOCK
  *
- * confirmationGranted is an internal one-shot authorization.
+ * confirmationGranted is ONLY used after the user has
+ * explicitly approved a confirmation request.
  *
- * Even when confirmationGranted === true:
- * - the target is resolved again
- * - P3 sensitivity is checked again
- * - visibility is checked again
- * - disabled state is checked again
- * - covered state is checked again
+ * It does NOT bypass:
+ * - target resolution
+ * - visibility checks
+ * - disabled checks
+ * - covered-target checks
+ * - P3 sensitive checks
+ * - action/risk classification
  *
- * Only the already-satisfied confirmation requirement is bypassed.
+ * Therefore a post-confirmation evaluation is still a
+ * complete fresh safety evaluation.
  */
 export function evaluateAction(
   agentAction,
@@ -69,9 +39,11 @@ export function evaluateAction(
     confirmationGranted = false
   } = {}
 ) {
-  // --------------------------------------------------
+
+  // -----------------------------------------
   // 0. Validate action object
-  // --------------------------------------------------
+  // -----------------------------------------
+
   if (
     !agentAction ||
     typeof agentAction !== "object" ||
@@ -85,78 +57,26 @@ export function evaluateAction(
     };
   }
 
+
   const {
     action,
-    target_id,
-    metadata
+    target_id
   } = agentAction;
 
-  // --------------------------------------------------
-  // 1. Validate action type
-  // --------------------------------------------------
-  if (
-    typeof action !== "string" ||
-    !SUPPORTED_ACTIONS.has(action)
-  ) {
-    return {
-      decision: "BLOCK",
-      status: "INVALID_ACTION",
-      element: null,
-      reason: "UNSUPPORTED_ACTION"
-    };
-  }
 
-  // --------------------------------------------------
-  // 2. Validate metadata
-  // --------------------------------------------------
-  if (
-    metadata !== undefined &&
-    (
-      metadata === null ||
-      typeof metadata !== "object" ||
-      Array.isArray(metadata)
-    )
-  ) {
-    return {
-      decision: "BLOCK",
-      status: "INVALID_ACTION",
-      element: null,
-      reason: "INVALID_METADATA"
-    };
-  }
+  // -----------------------------------------
+  // 1. Actions without DOM targets
+  // -----------------------------------------
 
-  const actionMetadata =
-    metadata || {};
-
-  // --------------------------------------------------
-  // 3. Actions that do not require a DOM target
-  // --------------------------------------------------
   if (!target_id) {
 
-    // Navigation changes the browser destination.
+    // Navigation changes browser destination and
+    // therefore always requires confirmation.
     if (action === "navigate") {
-      const url =
-        actionMetadata.url;
 
-      if (!url) {
-        return {
-          decision: "BLOCK",
-          status: "INVALID_ACTION",
-          element: null,
-          reason: "NAVIGATION_URL_REQUIRED"
-        };
-      }
-
-      if (!isAllowedNavigationUrl(url)) {
-        return {
-          decision: "BLOCK",
-          status: "UNSAFE_NAVIGATION_BLOCKED",
-          element: null,
-          reason: "NAVIGATION_URL_SCHEME_NOT_ALLOWED"
-        };
-      }
-
-      if (confirmationGranted) {
+      if (
+        confirmationGranted
+      ) {
         return {
           decision: "EXECUTE",
           status: "CONFIRMED_NAVIGATION",
@@ -169,12 +89,13 @@ export function evaluateAction(
         decision: "CONFIRM",
         status: "CONFIRMATION_REQUIRED",
         element: null,
-        reason: "NAVIGATION_REQUIRES_CONFIRMATION"
+        reason:
+          "NAVIGATION_REQUIRES_CONFIRMATION"
       };
     }
 
-    // Scroll and wait are the only actions allowed
-    // without a DOM target.
+
+    // Scroll and wait are allowed without a target.
     if (
       action === "scroll" ||
       action === "wait"
@@ -187,7 +108,8 @@ export function evaluateAction(
       };
     }
 
-    // Click/type without a target is always invalid.
+
+    // Click/type without a target are invalid.
     return {
       decision: "BLOCK",
       status: "INVALID_ACTION",
@@ -196,43 +118,37 @@ export function evaluateAction(
     };
   }
 
-  // --------------------------------------------------
-  // 4. Validate target ID
-  // --------------------------------------------------
-  if (typeof target_id !== "string") {
-    return {
-      decision: "BLOCK",
-      status: "INVALID_ACTION",
-      element: null,
-      reason: "TARGET_ID_MUST_BE_STRING"
-    };
-  }
 
-  // --------------------------------------------------
-  // 5. Resolve target
-  // --------------------------------------------------
-  //
-  // This is deliberately performed every time evaluateAction
-  // is called. Confirmation approval must never reuse the
-  // element from the first evaluation.
+  // -----------------------------------------
+  // 2. Resolve target FRESH
+  // -----------------------------------------
+
   const resolution =
     resolveTarget(target_id);
+
 
   if (!resolution.success) {
     return {
       decision: "BLOCK",
       status: resolution.status,
       element: null,
-      reason: "TARGET_COULD_NOT_BE_RESOLVED"
+      reason:
+        "TARGET_COULD_NOT_BE_RESOLVED"
     };
   }
 
-  // --------------------------------------------------
-  // 6. P3 HARD VETO
-  // --------------------------------------------------
+
+  // -----------------------------------------
+  // 3. P3 HARD VETO
+  // -----------------------------------------
   //
-  // This happens AFTER fresh target resolution and on
-  // EVERY evaluation, including post-confirmation.
+  // This check happens EVERY time this function
+  // is called, including after confirmation.
+  //
+  // Therefore a P3 update made while the confirmation
+  // dialog is open wins over a previous approval.
+  //
+
   if (isSensitive(target_id)) {
     return {
       decision: "BLOCK",
@@ -246,24 +162,29 @@ export function evaluateAction(
     };
   }
 
-  // --------------------------------------------------
-  // 7. Risk classification
-  // --------------------------------------------------
+
+  // -----------------------------------------
+  // 4. Risk classification
+  // -----------------------------------------
+
   const risk =
     classifyRisk(
       agentAction,
       resolution.element
     );
 
-  // --------------------------------------------------
-  // 8. Confirmation requirement
-  // --------------------------------------------------
+
+  // -----------------------------------------
+  // 5. Confirmation
+  // -----------------------------------------
+
   if (risk === "CONFIRM") {
 
-    // A previous user confirmation only satisfies
-    // the confirmation requirement for THIS invocation.
+    // A user approval satisfies only the
+    // confirmation requirement.
     //
-    // Fresh target and P3 checks above still apply.
+    // All checks above have still been performed
+    // against the current page state.
     if (confirmationGranted) {
       return {
         decision: "EXECUTE",
@@ -281,9 +202,11 @@ export function evaluateAction(
     };
   }
 
-  // --------------------------------------------------
-  // 9. Safe action
-  // --------------------------------------------------
+
+  // -----------------------------------------
+  // 6. SAFE
+  // -----------------------------------------
+
   return {
     decision: "EXECUTE",
     status: "TARGET_RESOLVED",

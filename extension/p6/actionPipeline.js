@@ -2,29 +2,28 @@ import { evaluateAction } from "./safetyGate.js";
 import { executeAction } from "./executor.js";
 import { requestConfirmation } from "./confirmationFlow.js";
 
-/**
- * Send confirmation messages through the extension runtime when
- * running inside the real extension.
- *
- * Tests can inject their own sendMessage function.
- */
-function getDefaultSendMessage() {
-  if (
-    typeof chrome !== "undefined" &&
-    chrome.runtime &&
-    typeof chrome.runtime.sendMessage === "function"
-  ) {
-    return (message) => chrome.runtime.sendMessage(message);
-  }
 
-  return null;
+/**
+ * Creates the result returned when a safety decision blocks
+ * execution.
+ */
+function createBlockedResult(agentAction, safetyResult) {
+  return {
+    status: "BLOCKED",
+    action: agentAction?.action || null,
+    target_id: agentAction?.target_id || null,
+    reason: safetyResult.reason || null,
+    detail: safetyResult.status || null
+  };
 }
 
+
 /**
- * Create a privacy-safe action payload for the confirmation UI.
+ * Creates a privacy-safe confirmation payload.
  *
- * In particular, never send metadata.value because a type action
- * may contain a password, token, email, or other sensitive input.
+ * Do not send the complete P5 action to the confirmation UI.
+ * In particular, metadata.value may contain a password or
+ * other sensitive input.
  */
 function createConfirmationAction(agentAction) {
   if (!agentAction || typeof agentAction !== "object") {
@@ -41,11 +40,11 @@ function createConfirmationAction(agentAction) {
   };
 }
 
+
 /**
- * Create a short target description for the confirmation UI.
+ * Creates a short, privacy-safe confirmation summary.
  *
- * This deliberately avoids sending the full DOM element or the
- * original action metadata.
+ * Sensitive form values are intentionally never included.
  */
 function createTargetSummary(agentAction, element) {
   if (agentAction?.action === "navigate") {
@@ -96,60 +95,63 @@ function createTargetSummary(agentAction, element) {
     return `${agentAction?.action || "Action"} target`;
   }
 
-  // Keep confirmation UI summaries short.
   return normalized.slice(0, 120);
 }
 
+
 /**
- * Process a P5 action.
+ * Process a structured P5 action.
  *
- * Safe actions execute immediately.
- * Blocked actions never execute.
- * Risky actions require confirmation.
+ * SAFE:
+ *   safety check -> execute
  *
- * Confirmation approval always causes a FRESH safety evaluation.
- * The old DOM element is never reused.
+ * BLOCK:
+ *   safety check -> blocked
+ *
+ * CONFIRM:
+ *   safety check
+ *      -> request user confirmation
+ *      -> wait for response
+ *      -> fresh safety check
+ *      -> fresh target resolution
+ *      -> fresh P3 sensitive check
+ *      -> execute
+ *
+ * The DOM element returned by the first safety evaluation is
+ * never reused after confirmation.
  */
 export async function processAction(
   agentAction,
-  { sendMessage } = {}
+  {
+    sendMessage
+  } = {}
 ) {
+
+  // -----------------------------------------
+  // 1. FIRST SAFETY EVALUATION
+  // -----------------------------------------
+
   const safetyResult =
     evaluateAction(agentAction);
 
+
   // -----------------------------------------
-  // 1. BLOCKED
+  // 2. BLOCKED
   // -----------------------------------------
+
   if (safetyResult.decision === "BLOCK") {
-    return {
-      status: "BLOCKED",
-      action: agentAction?.action || null,
-      target_id: agentAction?.target_id || null,
-      reason:
-        safetyResult.reason ||
-        safetyResult.status ||
-        null,
-      detail: safetyResult.status
-    };
+    return createBlockedResult(
+      agentAction,
+      safetyResult
+    );
   }
 
-  // -----------------------------------------
-  // 2. CONFIRMATION REQUIRED
-  // -----------------------------------------
-  if (safetyResult.decision === "CONFIRM") {
-    const confirmationSender =
-      sendMessage ||
-      getDefaultSendMessage();
 
-    if (!confirmationSender) {
-      return {
-        status: "BLOCKED",
-        action: agentAction?.action || null,
-        target_id: agentAction?.target_id || null,
-        reason: "CONFIRMATION_UNAVAILABLE",
-        detail: "No confirmation message sender is available."
-      };
-    }
+  // -----------------------------------------
+  // 3. CONFIRMATION REQUIRED
+  // -----------------------------------------
+
+  if (safetyResult.decision === "CONFIRM") {
 
     const confirmationAction =
       createConfirmationAction(agentAction);
@@ -160,20 +162,34 @@ export async function processAction(
         safetyResult.element
       );
 
+
     let approved = false;
 
     try {
+
       approved =
         await requestConfirmation({
-          sendMessage: confirmationSender,
+          sendMessage,
           action: confirmationAction,
           targetSummary
         });
-    } catch {
-      approved = false;
+
+    } catch (error) {
+
+      return {
+        status: "BLOCKED",
+        action: agentAction?.action || null,
+        target_id: agentAction?.target_id || null,
+        reason:
+          "CONFIRMATION_FAILED",
+        detail:
+          error?.message ||
+          "Confirmation request failed."
+      };
     }
 
-    // No response / rejection / messaging failure
+
+    // No response, timeout, or explicit rejection
     // must never result in execution.
     if (!approved) {
       return {
@@ -184,20 +200,22 @@ export async function processAction(
       };
     }
 
+
     // -----------------------------------------
-    // 3. TOCTOU RE-CHECK
+    // 4. FRESH SAFETY EVALUATION
     // -----------------------------------------
     //
-    // The page may have changed while the confirmation
-    // dialog was open.
+    // This is the TOCTOU protection.
     //
-    // Therefore:
-    // - resolve the target again
-    // - check P3 sensitivity again
-    // - check visibility/disabled/covered state again
-    // - classify the current target again
+    // The original safetyResult.element is intentionally
+    // NOT reused.
     //
-    // The original safetyResult.element is NEVER reused.
+    // evaluateAction() resolves the target again and checks
+    // the current P3 registry again.
+    //
+    // confirmationGranted only satisfies the confirmation
+    // requirement that the user has already approved.
+    //
     const confirmedSafetyResult =
       evaluateAction(
         agentAction,
@@ -206,21 +224,19 @@ export async function processAction(
         }
       );
 
-    if (
-      confirmedSafetyResult.decision === "BLOCK"
-    ) {
-      return {
-        status: "BLOCKED",
-        action: agentAction?.action || null,
-        target_id: agentAction?.target_id || null,
-        reason:
-          confirmedSafetyResult.reason ||
-          confirmedSafetyResult.status ||
-          null,
-        detail: confirmedSafetyResult.status
-      };
+
+    // P3 or target safety wins over the earlier approval.
+    if (confirmedSafetyResult.decision === "BLOCK") {
+      return createBlockedResult(
+        agentAction,
+        confirmedSafetyResult
+      );
     }
 
+
+    // This is defensive. A correctly implemented
+    // confirmationGranted evaluation should not return
+    // CONFIRM, but if it ever does, fail closed.
     if (
       confirmedSafetyResult.decision === "CONFIRM"
     ) {
@@ -228,69 +244,28 @@ export async function processAction(
         status: "BLOCKED",
         action: agentAction?.action || null,
         target_id: agentAction?.target_id || null,
-        reason: "CONFIRMATION_REVALIDATION_FAILED",
-        detail: confirmedSafetyResult.status
+        reason:
+          "CONFIRMATION_REVALIDATION_FAILED",
+        detail:
+          confirmedSafetyResult.status || null
       };
     }
 
+
     // -----------------------------------------
-    // 4. EXECUTE USING FRESH TARGET
+    // 5. EXECUTE FRESH TARGET
     // -----------------------------------------
+
     return executeAction(
       agentAction,
       confirmedSafetyResult.element
     );
   }
 
+
   // -----------------------------------------
-  // 5. SAFE EXECUTION
+  // 6. SAFE EXECUTION
   // -----------------------------------------
-  return executeAction(
-    agentAction,
-    safetyResult.element
-  );
-}
-
-/**
- * Execute an action after confirmation has already been granted
- * by the caller.
- *
- * This function STILL performs a fresh safety check.
- *
- * It is intentionally one-shot: confirmationGranted only
- * satisfies the confirmation requirement for this invocation.
- */
-export function executeConfirmedAction(
-  agentAction
-) {
-  const safetyResult =
-    evaluateAction(
-      agentAction,
-      {
-        confirmationGranted: true
-      }
-    );
-
-  if (safetyResult.decision === "BLOCK") {
-    return {
-      status: "BLOCKED",
-      action: agentAction?.action || null,
-      target_id: agentAction?.target_id || null,
-      reason:
-        safetyResult.reason ||
-        safetyResult.status ||
-        null
-    };
-  }
-
-  if (safetyResult.decision === "CONFIRM") {
-    return {
-      status: "BLOCKED",
-      action: agentAction?.action || null,
-      target_id: agentAction?.target_id || null,
-      reason: "CONFIRMATION_REVALIDATION_FAILED"
-    };
-  }
 
   return executeAction(
     agentAction,

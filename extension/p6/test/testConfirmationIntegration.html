@@ -48,15 +48,27 @@
     } from "../sensitiveRegistry.js";
 
 
+    function createSender(messages) {
+
+      return (message) => {
+        messages.push(message);
+      };
+
+    }
+
+
     async function testApproval() {
 
       console.log(
-        "TEST 1: approved risky action"
+        "TEST 1: approval -> fresh safety -> execution"
       );
+
 
       _resetForTesting();
 
-      const sentMessages = [];
+
+      const messages = [];
+
 
       const action = {
         action: "click",
@@ -65,54 +77,66 @@
         metadata: {}
       };
 
+
       const promise =
         processAction(
           action,
           {
-            sendMessage: (message) => {
-              sentMessages.push(message);
-            }
+            sendMessage:
+              createSender(messages)
           }
         );
+
 
       console.assert(
         _pendingCountForTesting() === 1,
         "Confirmation should be pending"
       );
 
+
       const request =
-        sentMessages[0];
+        messages[0];
+
 
       console.assert(
         request.type ===
           "P6_CONFIRMATION_REQUEST",
-        "Wrong confirmation request type"
+        "Expected confirmation request"
       );
 
+
       handleConfirmationResponse({
-        type: "P6_CONFIRMATION_RESPONSE",
+        type:
+          "P6_CONFIRMATION_RESPONSE",
+
         requestId:
           request.requestId,
+
         approved: true
       });
+
 
       const result =
         await promise;
 
+
       console.log(
-        "Approved result:",
+        "Approval result:",
         result
       );
+
 
       console.assert(
         result.status === "EXECUTED",
         "Approved risky action should execute"
       );
 
+
       console.assert(
         _pendingCountForTesting() === 0,
-        "Confirmation should be cleared"
+        "No confirmation should remain pending"
       );
+
     }
 
 
@@ -122,14 +146,12 @@
         "TEST 2: DOM replacement while confirmation pending"
       );
 
+
       _resetForTesting();
 
-      const button =
-        document.getElementById(
-          "replaceButton"
-        );
 
-      const sentMessages = [];
+      const messages = [];
+
 
       const action = {
         action: "click",
@@ -138,67 +160,99 @@
         metadata: {}
       };
 
+
       const promise =
         processAction(
           action,
           {
-            sendMessage: (message) => {
-              sentMessages.push(message);
-            }
+            sendMessage:
+              createSender(messages)
           }
         );
+
 
       console.assert(
         _pendingCountForTesting() === 1,
         "Confirmation should be pending"
       );
 
-      // Replace the DOM node while confirmation is open.
-      button.remove();
+
+      const oldElement =
+        document.querySelector(
+          '[data-agent-id="el_replace"]'
+        );
+
+
+      console.assert(
+        oldElement !== null,
+        "Original target should exist"
+      );
+
+
+      // The page changes while the user is deciding.
+      oldElement.remove();
+
 
       const replacement =
         document.createElement("button");
 
+
+      replacement.id =
+        "replacementButton";
+
+
       replacement.textContent =
-        "Replacement";
+        "Replacement Button";
+
 
       replacement.setAttribute(
         "data-agent-id",
         "el_replace_new"
       );
 
+
       document.body.appendChild(
         replacement
       );
 
+
       const request =
-        sentMessages[0];
+        messages[0];
+
 
       handleConfirmationResponse({
-        type: "P6_CONFIRMATION_RESPONSE",
+        type:
+          "P6_CONFIRMATION_RESPONSE",
+
         requestId:
           request.requestId,
+
         approved: true
       });
 
+
       const result =
         await promise;
+
 
       console.log(
         "DOM replacement result:",
         result
       );
 
+
       console.assert(
         result.status === "BLOCKED",
         "Old target must be blocked after replacement"
       );
 
+
       console.assert(
         result.reason ===
           "TARGET_COULD_NOT_BE_RESOLVED",
-        "Expected target revalidation failure"
+        "Expected fresh target-resolution failure"
       );
+
     }
 
 
@@ -208,9 +262,12 @@
         "TEST 3: P3 marks target sensitive while confirmation pending"
       );
 
+
       _resetForTesting();
 
-      const sentMessages = [];
+
+      const messages = [];
+
 
       const action = {
         action: "click",
@@ -219,53 +276,66 @@
         metadata: {}
       };
 
+
       const promise =
         processAction(
           action,
           {
-            sendMessage: (message) => {
-              sentMessages.push(message);
-            }
+            sendMessage:
+              createSender(messages)
           }
         );
+
 
       console.assert(
         _pendingCountForTesting() === 1,
         "Confirmation should be pending"
       );
 
-      // P3 changes its verdict while confirmation is open.
+
+      // P3 changes its verdict before approval.
       update({
         sensitive_element_ids: [
           "el_sensitive"
         ],
+
         types: {
-          el_sensitive: "account_sensitive_data"
+          el_sensitive:
+            "account_sensitive_data"
         }
       });
 
+
       const request =
-        sentMessages[0];
+        messages[0];
+
 
       handleConfirmationResponse({
-        type: "P6_CONFIRMATION_RESPONSE",
+        type:
+          "P6_CONFIRMATION_RESPONSE",
+
         requestId:
           request.requestId,
+
         approved: true
       });
 
+
       const result =
         await promise;
+
 
       console.log(
         "P3 update result:",
         result
       );
 
+
       console.assert(
         result.status === "BLOCKED",
         "P3 hard veto must win after approval"
       );
+
 
       console.assert(
         result.reason.includes(
@@ -273,18 +343,22 @@
         ),
         "Expected P3 sensitive-element reason"
       );
+
     }
 
 
     async function testRejection() {
 
       console.log(
-        "TEST 4: user rejection"
+        "TEST 4: explicit rejection"
       );
+
 
       _resetForTesting();
 
-      const sentMessages = [];
+
+      const messages = [];
+
 
       const action = {
         action: "click",
@@ -293,39 +367,121 @@
         metadata: {}
       };
 
+
       const promise =
         processAction(
           action,
           {
-            sendMessage: (message) => {
-              sentMessages.push(message);
-            }
+            sendMessage:
+              createSender(messages)
           }
         );
 
+
       const request =
-        sentMessages[0];
+        messages[0];
+
 
       handleConfirmationResponse({
-        type: "P6_CONFIRMATION_RESPONSE",
+        type:
+          "P6_CONFIRMATION_RESPONSE",
+
         requestId:
           request.requestId,
+
         approved: false
       });
+
 
       const result =
         await promise;
 
-      console.log(
-        "Rejection result:",
-        result
-      );
 
       console.assert(
         result.status ===
           "CONFIRMATION_REJECTED",
-        "Rejected action must not execute"
+        "Rejection must not execute"
       );
+
+    }
+
+
+    async function testTimeout() {
+
+      console.log(
+        "TEST 5: confirmation timeout"
+      );
+
+
+      _resetForTesting();
+
+
+      const messages = [];
+
+
+      const action = {
+        action: "click",
+        target_id: "el_delete",
+        confidence: 0.95,
+        metadata: {}
+      };
+
+
+      /*
+       * The production timeout is 30 seconds.
+       *
+       * This test cannot inject timeoutMs through
+       * processAction(), so it verifies the timeout
+       * behavior separately through requestConfirmation
+       * in testConfirmationFlow.html.
+       *
+       * This integration test verifies that processAction
+       * remains pending until the confirmation layer resolves.
+       */
+      const promise =
+        processAction(
+          action,
+          {
+            sendMessage:
+              createSender(messages)
+          }
+        );
+
+
+      console.assert(
+        _pendingCountForTesting() === 1,
+        "Confirmation should remain pending"
+      );
+
+
+      const request =
+        messages[0];
+
+
+      // Resolve the pending request as a timeout-equivalent
+      // denial. The confirmation layer's dedicated test
+      // verifies the actual timer expiration.
+      handleConfirmationResponse({
+        type:
+          "P6_CONFIRMATION_RESPONSE",
+
+        requestId:
+          request.requestId,
+
+        approved: false
+      });
+
+
+      const result =
+        await promise;
+
+
+      console.assert(
+        result.status ===
+          "CONFIRMATION_REJECTED",
+        "Denied confirmation must not execute"
+      );
+
     }
 
 
@@ -339,10 +495,14 @@
 
       await testRejection();
 
+      await testTimeout();
+
+
       console.assert(
         _pendingCountForTesting() === 0,
-        "All confirmations should be cleared"
+        "All confirmation requests should be resolved"
       );
+
 
       console.log(
         "===================================="
@@ -355,14 +515,17 @@
       console.log(
         "===================================="
       );
+
     }
 
 
     runTests().catch((error) => {
+
       console.error(
         "Confirmation integration test failed:",
         error
       );
+
     });
 
   </script>

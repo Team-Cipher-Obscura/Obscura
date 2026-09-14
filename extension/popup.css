@@ -1,22 +1,12 @@
 /* =========================================================
    OBSCURA POPUP
-   Compact 420 x 600 design
    ========================================================= */
 
 * {
   box-sizing: border-box;
 }
 
-html {
-  width: 420px;
-  height: 600px;
-
-  margin: 0;
-  padding: 0;
-
-  overflow: hidden;
-}
-
+html,
 body {
   width: 420px;
   height: 600px;
@@ -27,31 +17,28 @@ body {
   overflow: hidden;
 
   background: #ffffff;
+}
 
-  color: #111111;
-
+body {
   font-family:
-    Inter,
     -apple-system,
     BlinkMacSystemFont,
     "Segoe UI",
     Roboto,
-    Helvetica,
     Arial,
     sans-serif;
+
+  color: #111111;
 }
 
 
 /* =========================================================
-   MAIN CONTAINER
+   MAIN
    ========================================================= */
 
-.popup-container {
+.popup {
   width: 420px;
   height: 600px;
-
-  min-width: 420px;
-  max-width: 420px;
 
   overflow: hidden;
 
@@ -67,16 +54,14 @@ body {
    ========================================================= */
 
 .header {
-  width: 100%;
-  height: 82px;
-
-  flex: 0 0 82px;
+  height: 88px;
+  min-height: 88px;
 
   display: flex;
   align-items: center;
   justify-content: space-between;
 
-  padding: 12px 24px;
+  padding: 14px 24px;
 
   border-bottom: 1px solid #eeeeee;
 }
@@ -85,15 +70,15 @@ body {
   display: flex;
   align-items: center;
 
-  gap: 12px;
-
-  min-width: 0;
+  gap: 13px;
 }
 
 
-/* LOGO */
+/* =========================================================
+   LOGO
+   ========================================================= */
 
-.logo-wrapper {
+.logo-box {
   width: 58px;
   height: 58px;
 
@@ -103,7 +88,7 @@ body {
 
   border-radius: 14px;
 
-  background: #17112f;
+  background: #19132f;
 
   display: flex;
   align-items: center;
@@ -118,48 +103,40 @@ body {
 
   object-fit: cover;
 
-  border: 0;
-
   border-radius: 14px;
 }
 
 
-/* BRAND */
+/* =========================================================
+   BRAND TEXT
+   ========================================================= */
 
-.brand-text {
-  min-width: 0;
-}
-
-.brand-text h1 {
-  margin: 0;
-
-  color: #08080a;
-
+.brand-title {
   font-size: 25px;
-  line-height: 27px;
+  line-height: 28px;
 
   font-weight: 700;
 
-  letter-spacing: -0.6px;
+  letter-spacing: -0.5px;
 
-  white-space: nowrap;
+  color: #08080a;
 }
 
-.brand-text p {
-  margin: 3px 0 0;
-
-  color: #77727f;
+.brand-subtitle {
+  margin-top: 3px;
 
   font-size: 14px;
   line-height: 17px;
 
+  color: #77727d;
+
   white-space: nowrap;
 }
 
 
-/* HEADER DOT */
+/* HEADER STATUS */
 
-.header-status-dot {
+.header-dot {
   width: 11px;
   height: 11px;
 
@@ -167,18 +144,14 @@ body {
 
   border-radius: 50%;
 
-  background: #aaa5b2;
+  background: #aaa6af;
 }
 
-.header-status-dot.idle {
-  background: #aaa5b2;
-}
-
-.header-status-dot.running {
+.header-dot.running {
   background: #6845d8;
 }
 
-.header-status-dot.error {
+.header-dot.error {
   background: #d9534f;
 }
 
@@ -188,32 +161,30 @@ body {
    ========================================================= */
 
 .task-section {
-  width: 100%;
-  height: 142px;
-
-  flex: 0 0 142px;
+  height: 143px;
+  min-height: 143px;
 
   padding: 17px 24px 13px;
 }
 
-.section-label {
+.task-label {
   display: block;
 
-  margin: 0 0 8px;
-
-  color: #68636f;
+  margin-bottom: 8px;
 
   font-size: 16px;
   line-height: 19px;
 
   font-weight: 600;
+
+  color: #68636f;
 }
 
 #task-input {
-  display: block;
-
   width: 100%;
   height: 52px;
+
+  display: block;
 
   padding: 0 17px;
 
@@ -225,65 +196,61 @@ body {
 
   background: #faf9fd;
 
-  color: #222222;
-
   font-family: inherit;
 
   font-size: 16px;
+
+  color: #222222;
 }
 
 #task-input::placeholder {
-  color: #b3afb9;
+  color: #b4b0b9;
 }
 
 #task-input:focus {
-  border-color: #6845d8;
-
   background: #ffffff;
 
+  border-color: #6845d8;
+
   box-shadow:
-    0 0 0 3px rgba(104, 69, 216, 0.09);
+    0 0 0 3px rgba(104, 69, 216, 0.08);
 }
 
 #task-input:disabled {
   background: #f5f4f7;
 
-  color: #88848d;
+  color: #88848c;
 }
 
 
 /* =========================================================
-   BUTTONS
+   ACTION BUTTONS
    ========================================================= */
 
-.task-actions {
+.action-row {
   width: 100%;
-
   height: 46px;
 
-  display: flex;
+  display: grid;
+
+  grid-template-columns:
+    minmax(0, 1fr)
+    78px;
 
   gap: 10px;
 
   margin-top: 10px;
 }
 
-.start-btn {
-  flex: 1;
-
-  min-width: 0;
-
+.start-btn,
+.stop-btn {
+  width: 100%;
   height: 46px;
 
-  padding: 0 10px;
-
-  border: none;
+  margin: 0;
+  padding: 0;
 
   border-radius: 13px;
-
-  background: #6845d8;
-
-  color: #ffffff;
 
   font-family: inherit;
 
@@ -291,13 +258,28 @@ body {
 
   font-weight: 600;
 
+  line-height: 46px;
+
+  text-align: center;
+
   white-space: nowrap;
 
   cursor: pointer;
 }
 
+
+/* START */
+
+.start-btn {
+  border: 1px solid #6845d8;
+
+  background: #6845d8;
+
+  color: #ffffff;
+}
+
 .start-btn:hover:not(:disabled) {
-  background: #5d3dcc;
+  background: #5e3fd0;
 }
 
 .start-btn:disabled {
@@ -306,39 +288,39 @@ body {
   cursor: not-allowed;
 }
 
+
+/* STOP */
+
 .stop-btn {
-  width: 76px;
-  height: 46px;
-
-  flex: 0 0 76px;
-
-  padding: 0;
-
-  border: 1px solid #e5e2e8;
-
-  border-radius: 13px;
+  border: 1px solid #dedbe3;
 
   background: #ffffff;
 
   color: #aaa7ae;
+}
 
-  font-family: inherit;
+.stop-btn:disabled {
+  opacity: 1;
 
-  font-size: 15px;
+  color: #aaa7ae;
 
-  font-weight: 600;
+  border-color: #e3e0e6;
 
-  cursor: pointer;
+  background: #ffffff;
+
+  cursor: not-allowed;
 }
 
 .stop-btn:not(:disabled) {
   color: #d9534f;
 
-  border-color: #e1c8c7;
+  border-color: #d8bdbc;
+
+  background: #ffffff;
 }
 
-.stop-btn:disabled {
-  cursor: not-allowed;
+.stop-btn:not(:disabled):hover {
+  background: #fff7f7;
 }
 
 
@@ -347,10 +329,8 @@ body {
    ========================================================= */
 
 .status-bar {
-  width: 100%;
   height: 45px;
-
-  flex: 0 0 45px;
+  min-height: 45px;
 
   display: flex;
   align-items: center;
@@ -361,13 +341,11 @@ body {
 
   background: #f4f1fb;
 
+  border-bottom: 1px solid #eeeaf5;
+
   color: #6f6a76;
 
   font-size: 14px;
-
-  border-bottom: 1px solid #eeeaf5;
-
-  overflow: hidden;
 }
 
 .status-dot {
@@ -378,7 +356,7 @@ body {
 
   border-radius: 50%;
 
-  background: #aaa5b2;
+  background: #aaa6af;
 }
 
 .status-bar.running .status-dot {
@@ -413,25 +391,22 @@ body {
    ========================================================= */
 
 .metrics {
-  width: 100%;
-  height: 86px;
-
-  flex: 0 0 86px;
+  height: 84px;
+  min-height: 84px;
 
   display: grid;
 
   grid-template-columns:
     repeat(3, 1fr);
 
-  padding: 14px 10px;
+  padding: 11px 10px;
 
   border-bottom: 1px solid #eeeeee;
 }
 
 .metric {
-  min-width: 0;
-
   display: flex;
+
   flex-direction: column;
 
   align-items: center;
@@ -444,28 +419,24 @@ body {
   border-right: none;
 }
 
-.metric-value {
-  color: #08080a;
-
+.metric-number {
   font-size: 28px;
   line-height: 29px;
 
   font-weight: 700;
 
-  letter-spacing: -0.5px;
+  color: #08080a;
 }
 
-.metric-label {
+.metric-name {
   margin-top: 4px;
-
-  color: #77727d;
 
   font-size: 12px;
   line-height: 15px;
 
-  white-space: nowrap;
+  color: #77727d;
 
-  text-align: center;
+  white-space: nowrap;
 }
 
 
@@ -474,17 +445,13 @@ body {
    ========================================================= */
 
 .preview-section {
-  width: 100%;
-  height: 190px;
+  height: 185px;
+  min-height: 185px;
 
-  flex: 0 0 190px;
-
-  padding: 15px 24px 12px;
+  padding: 14px 24px 10px;
 }
 
-.preview-header {
-  width: 100%;
-
+.preview-top {
   display: flex;
 
   align-items: flex-start;
@@ -493,36 +460,34 @@ body {
   gap: 8px;
 }
 
-.preview-heading {
-  min-width: 0;
-}
-
-.preview-heading h2 {
+.preview-top h2 {
   margin: 0;
-
-  color: #5f5a67;
 
   font-size: 17px;
   line-height: 20px;
 
   font-weight: 600;
+
+  color: #5f5a67;
 }
 
-.preview-heading p {
+.preview-top p {
   margin: 3px 0 0;
-
-  color: #99949e;
 
   font-size: 11px;
   line-height: 14px;
+
+  color: #99949e;
 
   white-space: nowrap;
 }
 
 
-/* PROTECTED */
+/* =========================================================
+   PROTECTED
+   ========================================================= */
 
-.protected-badge {
+.protected {
   flex: 0 0 auto;
 
   display: flex;
@@ -540,8 +505,6 @@ body {
 
   font-size: 12px;
 
-  line-height: 14px;
-
   font-weight: 600;
 
   white-space: nowrap;
@@ -549,7 +512,6 @@ body {
 
 .shield {
   font-size: 15px;
-  line-height: 1;
 }
 
 
@@ -557,9 +519,7 @@ body {
    PREVIEW LABELS
    ========================================================= */
 
-.preview-labels {
-  width: 100%;
-
+.preview-label-row {
   display: grid;
 
   grid-template-columns:
@@ -567,7 +527,7 @@ body {
 
   gap: 12px;
 
-  margin-top: 10px;
+  margin-top: 9px;
 
   margin-bottom: 5px;
 }
@@ -578,28 +538,25 @@ body {
 
   gap: 7px;
 
-  color: #716c77;
-
   font-size: 12px;
-  line-height: 15px;
 
   font-weight: 600;
+
+  color: #716c77;
 }
 
-.label-dot {
+.preview-dot {
   width: 8px;
   height: 8px;
-
-  flex: 0 0 8px;
 
   border-radius: 3px;
 }
 
-.original-dot {
+.preview-dot.original {
   background: #aaa6af;
 }
 
-.redacted-dot {
+.preview-dot.redacted {
   background: #6845d8;
 }
 
@@ -623,15 +580,15 @@ body {
   position: relative;
 
   width: 100%;
-  height: 116px;
+  height: 112px;
 
   overflow: hidden;
+
+  border: 1px dashed #dedbe4;
 
   border-radius: 11px;
 
   background: #faf9fd;
-
-  border: 1px dashed #dedbe4;
 }
 
 .redacted-card {
@@ -643,19 +600,19 @@ body {
 }
 
 .preview-image {
-  display: block;
-
   width: 100%;
   height: 100%;
+
+  display: none;
 
   object-fit: cover;
 }
 
-.preview-image.hidden {
-  display: none;
+.preview-image.visible {
+  display: block;
 }
 
-.preview-placeholder {
+.placeholder {
   position: absolute;
 
   inset: 0;
@@ -667,9 +624,9 @@ body {
 
   padding: 10px;
 
-  color: #aaa6b0;
-
   font-size: 12px;
+
+  color: #aaa6b0;
 
   text-align: center;
 }
@@ -684,10 +641,8 @@ body {
    ========================================================= */
 
 .footer {
-  width: 100%;
   height: 55px;
-
-  flex: 0 0 55px;
+  min-height: 55px;
 
   display: flex;
 
@@ -701,6 +656,4 @@ body {
   color: #aaa6af;
 
   font-size: 12px;
-
-  white-space: nowrap;
 }

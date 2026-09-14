@@ -2,66 +2,53 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  >
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Obscura</title>
-
-  <link
-    rel="stylesheet"
-    href="./popup.css"
-  >
+  <link rel="stylesheet" href="popup.css">
 </head>
 
 <body>
 
-  <main class="popup-container">
+  <div class="popup">
 
-    <!-- ================= HEADER ================= -->
-
+    <!-- HEADER -->
     <header class="header">
 
       <div class="brand">
 
-        <div class="logo-wrapper">
-
+        <div class="logo-box">
           <img
             id="obscura-logo"
             class="logo"
-            src="./assets/obscura-logo.jpeg"
             alt="Obscura"
           >
-
         </div>
 
         <div class="brand-text">
+          <div class="brand-title">
+            Obscura
+          </div>
 
-          <h1>Obscura</h1>
-
-          <p>
+          <div class="brand-subtitle">
             Privacy-preserving browser agent
-          </p>
-
+          </div>
         </div>
 
       </div>
 
-      <span
-        id="header-status-dot"
-        class="header-status-dot idle"
-      ></span>
+      <div
+        id="header-dot"
+        class="header-dot"
+      ></div>
 
     </header>
 
 
-    <!-- ================= TASK ================= -->
-
+    <!-- TASK -->
     <section class="task-section">
 
       <label
-        class="section-label"
+        class="task-label"
         for="task-input"
       >
         Task
@@ -70,11 +57,11 @@
       <input
         id="task-input"
         type="text"
-        autocomplete="off"
         placeholder="e.g. Find Mumbai flight"
+        autocomplete="off"
       >
 
-      <div class="task-actions">
+      <div class="action-row">
 
         <button
           id="start-btn"
@@ -98,11 +85,10 @@
     </section>
 
 
-    <!-- ================= STATUS ================= -->
-
+    <!-- STATUS -->
     <section
       id="status-bar"
-      class="status-bar idle"
+      class="status-bar"
     >
 
       <span
@@ -120,68 +106,59 @@
     </section>
 
 
-    <!-- ================= METRICS ================= -->
-
+    <!-- METRICS -->
     <section class="metrics">
 
       <div class="metric">
-
         <div
           id="pii-count"
-          class="metric-value"
+          class="metric-number"
         >
           0
         </div>
 
-        <div class="metric-label">
+        <div class="metric-name">
           PII detected
         </div>
-
       </div>
 
 
       <div class="metric">
-
         <div
           id="redacted-count"
-          class="metric-value"
+          class="metric-number"
         >
           0
         </div>
 
-        <div class="metric-label">
+        <div class="metric-name">
           Redacted
         </div>
-
       </div>
 
 
       <div class="metric">
-
         <div
           id="sent-count"
-          class="metric-value"
+          class="metric-number"
         >
           0
         </div>
 
-        <div class="metric-label">
+        <div class="metric-name">
           Sent to AI
         </div>
-
       </div>
 
     </section>
 
 
-    <!-- ================= PREVIEW ================= -->
-
+    <!-- PREVIEW -->
     <section class="preview-section">
 
-      <div class="preview-header">
+      <div class="preview-top">
 
-        <div class="preview-heading">
-
+        <div>
           <h2>
             Capture preview
           </h2>
@@ -189,46 +166,26 @@
           <p>
             Latest frame before and after redaction
           </p>
-
         </div>
 
-
-        <div class="protected-badge">
-
-          <span class="shield">
-            ♢
-          </span>
-
-          <span>
-            Protected
-          </span>
-
+        <div class="protected">
+          <span class="shield">♢</span>
+          <span>Protected</span>
         </div>
 
       </div>
 
 
-      <div class="preview-labels">
+      <div class="preview-label-row">
 
         <div class="preview-label">
-
-          <span class="label-dot original-dot"></span>
-
-          <span>
-            Original
-          </span>
-
+          <span class="preview-dot original"></span>
+          Original
         </div>
 
-
         <div class="preview-label">
-
-          <span class="label-dot redacted-dot"></span>
-
-          <span>
-            Redacted
-          </span>
-
+          <span class="preview-dot redacted"></span>
+          Redacted
         </div>
 
       </div>
@@ -236,19 +193,17 @@
 
       <div class="preview-grid">
 
-        <!-- ORIGINAL -->
-
-        <div class="preview-card original-card">
+        <div class="preview-card">
 
           <img
             id="original-preview"
-            class="preview-image hidden"
+            class="preview-image"
             alt="Original screenshot"
           >
 
           <div
             id="original-placeholder"
-            class="preview-placeholder"
+            class="placeholder"
           >
             Original screenshot
           </div>
@@ -256,19 +211,17 @@
         </div>
 
 
-        <!-- REDACTED -->
-
         <div class="preview-card redacted-card">
 
           <img
             id="redacted-preview"
-            class="preview-image hidden"
+            class="preview-image"
             alt="Redacted screenshot"
           >
 
           <div
             id="redacted-placeholder"
-            class="preview-placeholder"
+            class="placeholder redacted-placeholder"
           >
             Redacted screenshot
           </div>
@@ -280,8 +233,7 @@
     </section>
 
 
-    <!-- ================= FOOTER ================= -->
-
+    <!-- FOOTER -->
     <footer class="footer">
 
       <span>
@@ -294,10 +246,9 @@
 
     </footer>
 
-  </main>
+  </div>
 
-
-  <script src="./popup.js"></script>
+  <script src="popup.js"></script>
 
 </body>
 </html>

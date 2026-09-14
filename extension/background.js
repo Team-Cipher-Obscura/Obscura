@@ -24,6 +24,16 @@ importScripts("./dist/p4-listener.js");
 // P1 also owns the task and explicitly forwards it to P4
 // because P3's toP4 payload does not contain the task.
 //
+// IMPORTANT TASK/TAB BEHAVIOUR:
+//
+// When a task is started, P1 binds the task to the tab
+// on which the task was started.
+//
+// The user may switch to other tabs while Obscura works.
+// Obscura continues operating on the original task tab.
+//
+// A new task gets a new task-tab binding.
+//
 // P5 may return:
 //   click
 //   type
@@ -59,6 +69,21 @@ let captureRunning = false;
 let currentTask = null;
 
 let currentCycleId = null;
+
+
+// ==================================================
+// Task tab state
+//
+// The task is bound to the tab where the user
+// started the task.
+//
+// This MUST NOT change merely because the user
+// switches to another tab.
+// ==================================================
+
+let taskTabId = null;
+
+let taskWindowId = null;
 
 
 // ==================================================
@@ -189,8 +214,42 @@ async function startCaptureLoop(task) {
   }
 
 
+  // ----------------------------------------------
+  // Bind this task to the currently active tab.
+  //
+  // This is done ONLY when a new task starts.
+  // Subsequent cycles will use taskTabId directly.
+  // ----------------------------------------------
+
+  const taskTab =
+    await getActiveTab();
+
+
+  if (
+    !taskTab ||
+    !taskTab.id
+  ) {
+
+    notifyPopup(
+      "No active tab found."
+    );
+
+    return;
+  }
+
+
   currentTask =
     task.trim();
+
+
+  taskTabId =
+    taskTab.id;
+
+
+  taskWindowId =
+    taskTab.windowId ??
+    null;
+
 
   captureRunning = true;
 
@@ -202,6 +261,19 @@ async function startCaptureLoop(task) {
 
   notifyPopup(
     "Capture loop started."
+  );
+
+
+  console.log(
+    "[Obscura] Task started:",
+    {
+      task:
+        currentTask,
+
+      taskTabId,
+
+      taskWindowId
+    }
   );
 
 
@@ -228,6 +300,10 @@ async function startCaptureLoop(task) {
   currentTask = null;
 
   currentCycleId = null;
+
+  taskTabId = null;
+
+  taskWindowId = null;
 }
 
 
@@ -243,6 +319,17 @@ function stopCaptureLoop() {
 
 
   captureRunning = false;
+
+
+  // ----------------------------------------------
+  // Clear task-tab binding.
+  // A future task will bind to whichever tab
+  // is active when it is started.
+  // ----------------------------------------------
+
+  taskTabId = null;
+
+  taskWindowId = null;
 
 
   notifyPopup(
@@ -270,6 +357,10 @@ function sleep(ms) {
 
 // ==================================================
 // Active tab
+//
+// Used when STARTING a new task.
+//
+// Do NOT use this inside every capture cycle.
 // ==================================================
 
 async function getActiveTab() {
@@ -282,6 +373,50 @@ async function getActiveTab() {
 
 
   return tab;
+}
+
+
+// ==================================================
+// Task tab
+//
+// Every cycle uses this tab.
+//
+// This allows the user to switch to other tabs
+// while Obscura continues working on the assigned
+// task tab.
+// ==================================================
+
+async function getTaskTab() {
+
+  if (
+    taskTabId === null ||
+    taskTabId === undefined
+  ) {
+
+    return null;
+  }
+
+
+  try {
+
+    const tab =
+      await chrome.tabs.get(
+        taskTabId
+      );
+
+
+    return tab;
+
+  } catch (error) {
+
+    console.error(
+      "[Obscura] Task tab is no longer available:",
+      error
+    );
+
+
+    return null;
+  }
 }
 
 
@@ -1575,8 +1710,14 @@ async function runCaptureCycle(
     MAX_CAPTURE_ATTEMPTS
 ) {
 
+  // ----------------------------------------------
+  // IMPORTANT:
+  // Use the task-bound tab, NOT the currently
+  // active tab.
+  // ----------------------------------------------
+
   const tab =
-    await getActiveTab();
+    await getTaskTab();
 
 
   if (
@@ -1585,8 +1726,13 @@ async function runCaptureCycle(
   ) {
 
     notifyPopup(
-      "No active tab found."
+      "Task tab was closed or is no longer available."
     );
+
+
+    captureRunning =
+      false;
+
 
     return;
   }
@@ -1631,6 +1777,10 @@ async function runCaptureCycle(
 
       // ------------------------------------------
       // 2. Capture screenshot
+      //
+      // NOTE:
+      // The task tab is intentionally used here.
+      // The user may currently be viewing another tab.
       // ------------------------------------------
 
       const screenshot =

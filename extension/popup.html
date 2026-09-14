@@ -2,7 +2,6 @@
 <html lang="en">
 
 <head>
-
   <meta charset="UTF-8">
 
   <meta
@@ -16,14 +15,11 @@
     rel="stylesheet"
     href="popup.css"
   >
-
 </head>
-
 
 <body>
 
   <main class="popup">
-
 
     <!-- ================= HEADER ================= -->
 
@@ -52,7 +48,6 @@
 
       </div>
 
-
       <span
         id="header-dot"
         class="header-dot"
@@ -72,14 +67,12 @@
         Task
       </label>
 
-
       <input
         id="task-input"
         type="text"
         autocomplete="off"
         placeholder="e.g. Find Mumbai flight"
       >
-
 
       <div class="action-row">
 
@@ -90,7 +83,6 @@
         >
           Start capture cycle
         </button>
-
 
         <button
           id="stop-btn"
@@ -118,7 +110,6 @@
         class="status-dot"
       ></span>
 
-
       <span
         id="status-text"
         class="status-text"
@@ -132,7 +123,6 @@
     <!-- ================= METRICS ================= -->
 
     <section class="metrics">
-
 
       <div class="metric">
 
@@ -188,10 +178,9 @@
 
     <section class="preview-section">
 
-
       <div class="preview-heading">
 
-        <div>
+        <div class="preview-title">
 
           <h2>
             Capture preview
@@ -202,7 +191,6 @@
           </p>
 
         </div>
-
 
         <div class="protected-badge">
 
@@ -221,25 +209,20 @@
 
       <div class="preview-labels">
 
-
         <div class="preview-label">
 
-          <span
-            class="label-dot original-dot"
-          ></span>
+          <span class="label-dot original-dot"></span>
 
-          Original
+          <span>Original</span>
 
         </div>
 
 
         <div class="preview-label">
 
-          <span
-            class="label-dot redacted-dot"
-          ></span>
+          <span class="label-dot redacted-dot"></span>
 
-          Redacted
+          <span>Redacted</span>
 
         </div>
 
@@ -248,43 +231,46 @@
 
       <div class="preview-grid">
 
-
         <div class="preview-card">
 
-          <img
-            id="original-preview"
-            class="preview-image"
-            alt="Original screenshot"
-          >
+          <div class="preview-image-wrap">
 
+            <img
+              id="original-preview"
+              class="preview-image"
+              alt="Original screenshot"
+            >
 
-          <span
-            id="original-placeholder"
-            class="preview-placeholder"
-          >
-            Original screenshot
-          </span>
+            <span
+              id="original-placeholder"
+              class="preview-placeholder"
+            >
+              Original screenshot
+            </span>
+
+          </div>
 
         </div>
 
 
-        <div
-          class="preview-card redacted-card"
-        >
+        <div class="preview-card redacted-card">
 
-          <img
-            id="redacted-preview"
-            class="preview-image"
-            alt="Redacted screenshot"
-          >
+          <div class="preview-image-wrap">
 
+            <img
+              id="redacted-preview"
+              class="preview-image"
+              alt="Redacted screenshot"
+            >
 
-          <span
-            id="redacted-placeholder"
-            class="preview-placeholder redacted-placeholder"
-          >
-            Redacted screenshot
-          </span>
+            <span
+              id="redacted-placeholder"
+              class="preview-placeholder redacted-placeholder"
+            >
+              Redacted screenshot
+            </span>
+
+          </div>
 
         </div>
 
@@ -297,16 +283,15 @@
 
     <footer class="footer">
 
-      <span>
+      <span class="footer-brand">
         Obscura
       </span>
 
-      <span>
+      <span class="footer-text">
         P1 capture pipeline
       </span>
 
     </footer>
-
 
   </main>
 

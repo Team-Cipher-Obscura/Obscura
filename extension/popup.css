@@ -1,6 +1,6 @@
 /* =========================================================
    OBSCURA POPUP
-   Fixed 420 × 600 layout — no scrolling / no overflow
+   Fixed 420 × 600
    ========================================================= */
 
 * {
@@ -14,10 +14,18 @@ body {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    Helvetica, Arial, sans-serif;
+
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+
   background: #ffffff;
-  color: #202124;
+  color: #25252a;
 }
 
 body {
@@ -28,288 +36,374 @@ body {
 .popup {
   width: 420px;
   height: 600px;
-  overflow: hidden;
+
   display: flex;
   flex-direction: column;
+
+  overflow: hidden;
+
   background: #ffffff;
 }
+
 
 /* =========================================================
    HEADER
    ========================================================= */
 
 .header {
-  height: 88px;
-  min-height: 88px;
-  padding: 18px 22px;
+  width: 100%;
+  height: 82px;
+  min-height: 82px;
+
+  padding: 12px 22px;
+
   display: flex;
   align-items: center;
-  border-bottom: 1px solid #f0f0f3;
+
+  border-bottom: 1px solid #eeeeF2;
+}
+
+.brand {
+  min-width: 0;
+
+  display: flex;
+  align-items: center;
 }
 
 .logo {
   width: 58px;
   height: 58px;
-  flex: 0 0 58px;
-  object-fit: cover;
-  border-radius: 15px;
+  min-width: 58px;
+
   display: block;
+
+  object-fit: cover;
+
+  border-radius: 15px;
 }
 
-.header-content {
+.brand-copy {
   min-width: 0;
-  margin-left: 14px;
+  margin-left: 13px;
 }
 
-.header-content h1 {
+.brand-title {
   margin: 0;
+
   font-size: 25px;
-  line-height: 30px;
+  line-height: 28px;
   font-weight: 700;
-  letter-spacing: -0.4px;
-  color: #252525;
+  letter-spacing: -0.5px;
+
+  color: #29292e;
 }
 
-.header-content p {
-  margin: 3px 0 0;
-  font-size: 14px;
-  line-height: 19px;
-  color: #7b7b83;
+.brand-subtitle {
+  margin-top: 3px;
+
+  font-size: 13px;
+  line-height: 18px;
+
+  color: #85858c;
+
   white-space: nowrap;
 }
 
 .header-dot {
   width: 18px;
   height: 18px;
+  min-width: 18px;
+
   margin-left: auto;
-  flex: 0 0 18px;
+
   border-radius: 50%;
-  background: #d9d9dc;
+
+  background: #d7d7dc;
 }
 
+
 /* =========================================================
-   TASK
+   TASK SECTION
    ========================================================= */
 
 .task-section {
-  height: 143px;
-  min-height: 143px;
-  padding: 18px 22px 12px;
+  width: 100%;
+  height: 140px;
+  min-height: 140px;
+
+  padding: 13px 22px 8px;
 }
 
 .task-label {
   display: block;
-  margin-bottom: 8px;
+
+  margin-bottom: 6px;
+
   font-size: 16px;
+  line-height: 20px;
   font-weight: 600;
-  color: #66666d;
+
+  color: #696970;
 }
 
 #task-input {
   width: 100%;
-  height: 50px;
+  height: 44px;
+
   display: block;
-  padding: 0 16px;
-  border: 1px solid #e0e0e5;
-  border-radius: 14px;
+
+  padding: 0 15px;
+
+  border: 1px solid #dedee4;
+  border-radius: 13px;
+
   outline: none;
+
   background: #ffffff;
-  color: #25252a;
-  font-size: 15px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  color: #29292e;
+
+  font-family: inherit;
+  font-size: 14px;
+
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.025);
 }
 
 #task-input::placeholder {
-  color: #b4b4ba;
+  color: #b5b5bb;
 }
 
 #task-input:focus {
-  border-color: #7651d6;
-  box-shadow: 0 0 0 3px rgba(118, 81, 214, 0.10);
+  border-color: #7650d8;
+
+  box-shadow:
+    0 0 0 3px rgba(118, 80, 216, 0.10);
 }
 
+
 /* =========================================================
-   BUTTONS
+   ACTION BUTTONS
    ========================================================= */
 
-.button-row {
+.action-row {
   width: 100%;
-  height: 46px;
-  margin-top: 10px;
+  height: 42px;
+
+  margin-top: 8px;
 
   display: grid;
   grid-template-columns: minmax(0, 1fr) 82px;
-  gap: 10px;
+  column-gap: 10px;
 
   align-items: stretch;
 }
 
-.button-row button {
-  width: 100%;
+.action-row button {
+  height: 42px;
   min-width: 0;
-  height: 46px;
+  width: 100%;
+
   margin: 0;
-  padding: 0 12px;
+  padding: 0 10px;
 
   display: flex;
   align-items: center;
   justify-content: center;
 
-  border-radius: 12px;
+  border-radius: 11px;
+
   font-family: inherit;
   font-size: 14px;
   font-weight: 600;
   line-height: 1;
 
   cursor: pointer;
+
   appearance: none;
   -webkit-appearance: none;
 }
 
-/* START */
 
-#start-btn {
-  border: 1px solid #6942cf;
-  background: linear-gradient(135deg, #7650dc, #6337c7);
+/* ---------------- START ---------------- */
+
+.start-btn {
+  border: 1px solid #6941d0;
+
+  background: linear-gradient(
+    135deg,
+    #7953df 0%,
+    #6439c8 100%
+  );
+
   color: #ffffff;
-  box-shadow: 0 3px 8px rgba(105, 66, 207, 0.18);
+
+  box-shadow:
+    0 3px 8px rgba(105, 65, 208, 0.18);
 }
 
-#start-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #7049d5, #5f34c2);
+.start-btn:hover:not(:disabled) {
+  background: linear-gradient(
+    135deg,
+    #7049d5 0%,
+    #5f35c1 100%
+  );
 }
 
-#start-btn:active:not(:disabled) {
+.start-btn:active:not(:disabled) {
   transform: translateY(1px);
 }
 
-#start-btn:disabled {
+.start-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
 
-/* STOP — deliberately boxed */
 
-#stop-btn {
-  width: 82px;
-  min-width: 82px;
-  max-width: 82px;
+/* ---------------- STOP ---------------- */
 
-  border: 2px solid #d7d7dc !important;
+.stop-btn {
+  width: 82px !important;
+  min-width: 82px !important;
+  max-width: 82px !important;
+
+  border: 2px solid #d4d4da !important;
+
   background: #ffffff !important;
-  color: #68686f !important;
 
-  box-shadow: none;
+  color: #696970 !important;
+
+  box-shadow: none !important;
 }
 
-#stop-btn:hover:not(:disabled) {
-  border-color: #bcbcc4 !important;
+.stop-btn:hover:not(:disabled) {
+  border-color: #bdbdc5 !important;
   background: #fafafa !important;
 }
 
-#stop-btn:active:not(:disabled) {
+.stop-btn:active:not(:disabled) {
   background: #f4f4f6 !important;
 }
 
-#stop-btn:disabled {
+.stop-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
+
 
 /* =========================================================
    STATUS
    ========================================================= */
 
 .status-bar {
-  height: 45px;
-  min-height: 45px;
+  width: 100%;
+  height: 44px;
+  min-height: 44px;
+
   padding: 0 22px;
 
   display: flex;
   align-items: center;
-  gap: 11px;
+
+  gap: 10px;
 
   background: #fafafd;
-  border-top: 1px solid #f1f1f4;
-  border-bottom: 1px solid #f1f1f4;
+
+  border-top: 1px solid #f0f0f3;
+  border-bottom: 1px solid #f0f0f3;
 }
 
-.status-bar .status-dot,
 .status-dot {
-  width: 10px;
-  height: 10px;
-  min-width: 10px;
+  width: 9px;
+  height: 9px;
+  min-width: 9px;
+
   border-radius: 50%;
-  background: #b8b8bd;
+
+  background: #b7b7bd;
 }
 
-#status-text {
+.status-text {
   min-width: 0;
+
   overflow: hidden;
+
   text-overflow: ellipsis;
   white-space: nowrap;
 
   font-size: 13px;
-  color: #66666d;
+  line-height: 18px;
+
+  color: #68686f;
 }
+
 
 /* =========================================================
    METRICS
    ========================================================= */
 
 .metrics {
-  height: 84px;
-  min-height: 84px;
-  padding: 13px 22px;
+  width: 100%;
+  height: 78px;
+  min-height: 78px;
+
+  padding: 10px 22px;
 
   display: grid;
   grid-template-columns: repeat(3, 1fr);
+
   align-items: center;
 
-  border-bottom: 1px solid #f0f0f3;
+  border-bottom: 1px solid #eeeeF2;
 }
 
 .metric {
   min-width: 0;
+
   text-align: center;
 }
 
-.metric:not(:last-child) {
-  border-right: 1px solid #eeeeF1;
+.metric + .metric {
+  border-left: 1px solid #eeeeF1;
 }
 
-.metric-value {
-  display: block;
-  font-size: 25px;
-  line-height: 28px;
+.metric-number {
+  font-size: 23px;
+  line-height: 26px;
   font-weight: 700;
-  color: #24242a;
+
+  color: #29292e;
 }
 
-.metric-label {
-  display: block;
-  margin-top: 3px;
-  font-size: 12px;
-  line-height: 16px;
-  color: #88888f;
+.metric-name {
+  margin-top: 2px;
+
+  font-size: 11px;
+  line-height: 15px;
+
+  color: #898990;
 }
+
 
 /* =========================================================
-   PREVIEW
+   PREVIEW SECTION
    ========================================================= */
 
 .preview-section {
-  height: 185px;
-  min-height: 185px;
-  padding: 13px 22px 8px;
-  position: relative;
+  width: 100%;
+  height: 196px;
+  min-height: 196px;
+
+  padding: 11px 22px 7px;
+
+  overflow: hidden;
 }
 
-.preview-header {
+.preview-heading {
+  width: 100%;
+  height: 41px;
+
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  height: 40px;
 }
 
 .preview-title {
@@ -318,141 +412,215 @@ body {
 
 .preview-title h2 {
   margin: 0;
+
   font-size: 18px;
   line-height: 22px;
   font-weight: 650;
-  color: #35353a;
+
+  color: #36363b;
 }
 
 .preview-title p {
   margin: 2px 0 0;
+
   font-size: 11px;
   line-height: 15px;
-  color: #a0a0a6;
+
+  color: #9999a0;
 }
 
 .protected-badge {
-  flex: 0 0 auto;
-  margin-top: 2px;
-  padding: 6px 9px;
+  flex-shrink: 0;
+
+  height: 27px;
+
+  margin-top: 1px;
+  padding: 0 9px;
+
+  display: flex;
+  align-items: center;
+  gap: 5px;
+
   border-radius: 999px;
+
   background: #f1edff;
-  color: #7051c8;
+
+  color: #7050c9;
+
   font-size: 11px;
   font-weight: 650;
-  line-height: 14px;
 }
 
-/* Preview cards */
+.shield {
+  font-size: 15px;
+  line-height: 1;
+}
 
-.preview-grid {
+
+/* =========================================================
+   PREVIEW LABELS
+   ========================================================= */
+
+.preview-labels {
   width: 100%;
-  height: 112px;
+  height: 21px;
+
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-}
 
-.preview-card {
-  min-width: 0;
-  height: 112px;
+  align-items: center;
 }
 
 .preview-label {
-  height: 22px;
   display: flex;
   align-items: center;
   gap: 7px;
 
   font-size: 11px;
+  line-height: 15px;
   font-weight: 600;
-  color: #707078;
+
+  color: #727279;
 }
 
-.preview-label .label-dot {
+.label-dot {
   width: 8px;
   height: 8px;
   min-width: 8px;
+
   border-radius: 50%;
+}
+
+.original-dot {
   background: #b8b8bd;
 }
 
-.preview-card.redacted .label-dot {
-  background: #7250d3;
+.redacted-dot {
+  background: #7350d3;
 }
 
-.preview-image {
+
+/* =========================================================
+   PREVIEW GRID
+   ========================================================= */
+
+.preview-grid {
   width: 100%;
-  height: 90px;
+  height: 108px;
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.preview-card {
+  width: 100%;
+  height: 108px;
+
+  min-width: 0;
+  overflow: hidden;
+}
+
+.preview-image-wrap {
+  position: relative;
+
+  width: 100%;
+  height: 108px;
+
   overflow: hidden;
 
   display: flex;
   align-items: center;
   justify-content: center;
 
-  border: 1px solid #ededf1;
+  border: 1px solid #e8e8ed;
   border-radius: 12px;
+
   background: #f8f8fa;
 }
 
-.preview-image img {
+.preview-image {
+  position: absolute;
+
+  inset: 0;
+
   width: 100%;
   height: 100%;
-  object-fit: contain;
+
   display: block;
+
+  object-fit: contain;
+
+  z-index: 2;
 }
 
 .preview-placeholder {
-  padding: 10px;
+  position: relative;
+
+  z-index: 1;
+
+  padding: 8px;
+
   text-align: center;
+
   font-size: 10px;
   line-height: 14px;
-  color: #aaaab1;
+
+  color: #a6a6ad;
 }
+
+.preview-image[src=""] {
+  display: none;
+}
+
 
 /* =========================================================
    FOOTER
    ========================================================= */
 
 .footer {
-  height: 55px;
-  min-height: 55px;
+  width: 100%;
+  height: 60px;
+  min-height: 60px;
+
   padding: 0 22px;
 
   display: flex;
   align-items: center;
   justify-content: space-between;
 
-  border-top: 1px solid #f0f0f3;
-  color: #a1a1a7;
+  border-top: 1px solid #eeeeF2;
+
+  color: #9d9da4;
 }
 
 .footer-brand {
   font-size: 11px;
+  line-height: 15px;
   font-weight: 600;
 }
 
 .footer-text {
   font-size: 10px;
+  line-height: 14px;
 }
+
 
 /* =========================================================
-   SAFETY — PREVENT ANY CHILD FROM PUSHING LAYOUT
+   FINAL OVERFLOW PROTECTION
    ========================================================= */
 
-.header *,
-.task-section *,
-.status-bar *,
-.metrics *,
-.preview-section *,
-.footer * {
-  max-width: 100%;
+.header,
+.task-section,
+.status-bar,
+.metrics,
+.preview-section,
+.footer {
+  flex-shrink: 0;
 }
 
-button {
-  overflow: hidden;
-}
-
+button,
 input {
   font-family: inherit;
 }

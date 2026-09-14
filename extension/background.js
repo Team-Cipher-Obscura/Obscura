@@ -1,3 +1,4 @@
+importScripts("./dist/p4-listener.js");
 // background.js
 // P1 — Capture Cycle Coordinator
 //
@@ -32,6 +33,7 @@
 //   done
 //
 // "done" is the explicit task-completion signal.
+
 
 
 // ==================================================
@@ -457,90 +459,56 @@ async function sendToDownstream(
 // }
 // ==================================================
 
-async function sendToP4(
-  payload,
-  task
-) {
+async function sendToP4(payload, task) {
 
-  if (
-    !payload ||
-    !Array.isArray(
-      payload.elements
-    )
-  ) {
-
+  if (!payload || !Array.isArray(payload.elements)) {
     return {
       valid: false,
-      error:
-        "Invalid P4 payload."
+      error: "Invalid P4 payload."
     };
   }
 
-
-  if (
-    typeof task !== "string" ||
-    !task.trim()
-  ) {
-
+  if (typeof task !== "string" || !task.trim()) {
     return {
       valid: false,
-      error:
-        "Missing task for P4."
+      error: "Missing task for P4."
     };
   }
 
-
-  const p4Message = {
-
-    type:
-      "P4_INPUT",
-
+  console.log("[P1 → P4] Request:", {
+    type: "P4_INPUT",
     payload,
-
-    task:
-      task.trim()
-  };
-
-
-  console.log(
-    "[P1 → P4] Request:",
-    p4Message
-  );
-
+    task: task.trim()
+  });
 
   try {
 
-    const response =
-      await chrome.runtime.sendMessage(
-        p4Message
-      );
+    if (typeof globalThis.handleP4Input !== "function") {
+      return {
+        valid: false,
+        error: "P4 handler is not loaded."
+      };
+    }
 
-
-    console.log(
-      "[P4 → P1] Response:",
-      response
+    const response = globalThis.handleP4Input(
+      payload,
+      task.trim()
     );
 
+    console.log("[P4 → P1] Response:", response);
 
-    return response || {
-      valid: false,
-      error:
-        "P4 returned no response."
-    };
+    return response;
 
   } catch (error) {
 
     console.error(
-      "[P1] P4 communication failed:",
+      "[P1] P4 processing failed:",
       error
     );
 
-
     return {
       valid: false,
-      error:
-        error?.message ||
-        "P4 communication failed."
+      error: error?.message || "P4 processing failed."
     };
   }
 }

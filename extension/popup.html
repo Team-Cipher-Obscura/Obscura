@@ -2,19 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  >
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <title>Obscura</title>
 
-  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="./popup.css">
 </head>
 
 <body>
 
-  <main class="popup-container">
+  <div class="popup-container">
 
     <!-- ================= HEADER ================= -->
 
@@ -24,9 +21,10 @@
 
         <div class="logo-wrapper">
           <img
-            src="assets/obscura-logo.jpeg"
-            alt="Obscura"
+            id="obscura-logo"
             class="logo"
+            src="./assets/obscura-logo.jpeg"
+            alt="Obscura logo"
           >
         </div>
 
@@ -59,8 +57,8 @@
       <input
         id="task-input"
         type="text"
-        placeholder="e.g. Find Mumbai flight"
         autocomplete="off"
+        placeholder="e.g. Find Mumbai flight"
       >
 
       <div class="task-actions">
@@ -112,48 +110,48 @@
 
       <div class="metric">
 
-        <span
+        <div
           id="pii-count"
           class="metric-value"
         >
           0
-        </span>
+        </div>
 
-        <span class="metric-label">
+        <div class="metric-label">
           PII detected
-        </span>
+        </div>
 
       </div>
 
 
       <div class="metric">
 
-        <span
+        <div
           id="redacted-count"
           class="metric-value"
         >
           0
-        </span>
+        </div>
 
-        <span class="metric-label">
+        <div class="metric-label">
           Redacted
-        </span>
+        </div>
 
       </div>
 
 
       <div class="metric">
 
-        <span
+        <div
           id="sent-count"
           class="metric-value"
         >
           0
-        </span>
+        </div>
 
-        <span class="metric-label">
+        <div class="metric-label">
           Sent to AI
-        </span>
+        </div>
 
       </div>
 
@@ -164,7 +162,7 @@
 
     <section class="preview-section">
 
-      <div class="preview-heading">
+      <div class="preview-header">
 
         <div class="preview-title">
 
@@ -179,13 +177,9 @@
 
         <div class="protected-badge">
 
-          <span class="shield-icon">
-            ♢
-          </span>
+          <span class="shield-icon">♢</span>
 
-          <span>
-            Protected
-          </span>
+          <span>Protected</span>
 
         </div>
 
@@ -200,9 +194,7 @@
 
           <span class="label-dot original-dot"></span>
 
-          <span>
-            Original
-          </span>
+          <span>Original</span>
 
         </div>
 
@@ -211,9 +203,7 @@
 
           <span class="label-dot redacted-dot"></span>
 
-          <span>
-            Redacted
-          </span>
+          <span>Redacted</span>
 
         </div>
 
@@ -224,7 +214,7 @@
 
       <div class="preview-grid">
 
-        <!-- Original -->
+        <!-- ORIGINAL -->
 
         <div class="preview-card original-card">
 
@@ -244,7 +234,7 @@
         </div>
 
 
-        <!-- Redacted -->
+        <!-- REDACTED -->
 
         <div class="preview-card redacted-card">
 
@@ -272,20 +262,16 @@
 
     <footer class="footer">
 
-      <span>
-        Obscura
-      </span>
+      <span>Obscura</span>
 
-      <span>
-        P1 capture pipeline
-      </span>
+      <span>P1 capture pipeline</span>
 
     </footer>
 
-  </main>
+  </div>
 
 
-  <script src="popup.js"></script>
+  <script src="./popup.js"></script>
 
 </body>
 </html>

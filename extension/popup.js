@@ -3,6 +3,11 @@
    P1 UI CONTROLLER
    ========================================================= */
 
+
+/* =========================================================
+   DOM ELEMENTS
+   ========================================================= */
+
 const taskInput =
   document.getElementById("task-input");
 
@@ -19,28 +24,42 @@ const statusText =
   document.getElementById("status-text");
 
 const headerStatusDot =
-  document.getElementById("header-status-dot");
+  document.getElementById(
+    "header-status-dot"
+  );
 
 const piiCount =
   document.getElementById("pii-count");
 
 const redactedCount =
-  document.getElementById("redacted-count");
+  document.getElementById(
+    "redacted-count"
+  );
 
 const sentCount =
-  document.getElementById("sent-count");
+  document.getElementById(
+    "sent-count"
+  );
 
 const originalPreview =
-  document.getElementById("original-preview");
+  document.getElementById(
+    "original-preview"
+  );
 
 const redactedPreview =
-  document.getElementById("redacted-preview");
+  document.getElementById(
+    "redacted-preview"
+  );
 
 const originalPlaceholder =
-  document.getElementById("original-placeholder");
+  document.getElementById(
+    "original-placeholder"
+  );
 
 const redactedPlaceholder =
-  document.getElementById("redacted-placeholder");
+  document.getElementById(
+    "redacted-placeholder"
+  );
 
 
 /* =========================================================
@@ -130,6 +149,7 @@ async function startCapture() {
     taskInput.focus();
 
     return;
+
   }
 
 
@@ -162,6 +182,7 @@ async function startCapture() {
       );
 
       return;
+
     }
 
 
@@ -322,7 +343,7 @@ function handleBackgroundMessage(message) {
 
 
 /* =========================================================
-   PREVIEW
+   PREVIEW UPDATE
    ========================================================= */
 
 function updatePreview(message) {
@@ -364,7 +385,7 @@ function updatePreview(message) {
 
 
 /* =========================================================
-   SHOW PREVIEW
+   SHOW PREVIEW IMAGE
    ========================================================= */
 
 function showPreview(

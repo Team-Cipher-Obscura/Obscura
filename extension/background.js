@@ -60,9 +60,8 @@
 //
 //   globalThis.handleP4Input
 //
-// P4 is therefore executed inside the P1 background
+// P4 therefore executes inside the P1 background
 // service-worker context.
-//
 // ==================================================
 
 importScripts("./dist/p4-listener.js");
@@ -190,12 +189,12 @@ chrome.runtime.onMessage.addListener(
     // ----------------------------------------------
     // P4_INPUT
     //
-    // This keeps the P4 message contract available
-    // for any other extension context.
+    // P4 is loaded directly into this service
+    // worker through p4-listener.js.
     //
-    // P1's own sendToP4() calls handleP4Input()
-    // directly because the service worker should not
-    // send a runtime message to itself.
+    // This listener keeps the P4_INPUT contract
+    // available and delegates directly to the
+    // loaded P4 handler.
     // ----------------------------------------------
 
     if (
@@ -350,7 +349,7 @@ async function startCaptureLoop(
 
 
   // ----------------------------------------------
-  // Get the active tab ONLY when the task starts.
+  // Get the active tab ONLY when a NEW task starts.
   // ----------------------------------------------
 
   const taskTab =
@@ -489,7 +488,6 @@ function stopCaptureLoop() {
   captureRunning =
     false;
 
-
   taskTabId =
     null;
 
@@ -539,11 +537,13 @@ async function getActiveTab() {
     tab
   ] =
     await chrome.tabs.query({
+
       active:
         true,
 
       currentWindow:
         true
+
     });
 
 
@@ -790,7 +790,9 @@ async function sendToDownstream(
   payload
 ) {
 
-  if (!tabId) {
+  if (
+    !tabId
+  ) {
 
     return {
 
@@ -809,10 +811,12 @@ async function sendToDownstream(
       await chrome.tabs.sendMessage(
         tabId,
         {
+
           type:
             "P1_CAPTURE_CYCLE",
 
           payload
+
         }
       );
 
@@ -921,6 +925,10 @@ async function sendToP4(
   }
 
 
+  // ----------------------------------------------
+  // Verify P4 was loaded.
+  // ----------------------------------------------
+
   if (
     typeof globalThis.handleP4Input !==
     "function"
@@ -937,17 +945,21 @@ async function sendToP4(
   }
 
 
+  const p4Message = {
+
+    type:
+      "P4_INPUT",
+
+    payload,
+
+    task:
+      task.trim()
+  };
+
+
   console.log(
     "[P1 → P4] Request:",
-    {
-      type:
-        "P4_INPUT",
-
-      payload,
-
-      task:
-        task.trim()
-    }
+    p4Message
   );
 
 
@@ -1005,7 +1017,9 @@ async function callP5({
   toP4
 }) {
 
-  if (!toP4) {
+  if (
+    !toP4
+  ) {
 
     throw new Error(
       "Missing P4 payload."
@@ -1028,7 +1042,8 @@ async function callP5({
         ? toP4.elements
         : [],
 
-    // This is P4's sanitized screenshot.
+    // P4 receives and forwards P3's sanitized
+    // screenshot.
     screenshot:
       toP4.screenshot ??
       null
@@ -1050,6 +1065,7 @@ async function callP5({
       await fetch(
         P5_ENDPOINT,
         {
+
           method:
             "POST",
 
@@ -1057,12 +1073,14 @@ async function callP5({
 
             "Content-Type":
               "application/json"
+
           },
 
           body:
             JSON.stringify(
               requestBody
             )
+
         }
       );
 
@@ -1333,7 +1351,9 @@ async function handleP5Action(
     );
 
 
-  if (!result) {
+  if (
+    !result
+  ) {
 
     notifyPopup(
       "P6 returned no action result."
@@ -1359,8 +1379,7 @@ async function handleP5Action(
 // P6 runs inside content.js because it needs the
 // live page DOM.
 //
-// Therefore this MUST use tabs.sendMessage()
-// rather than runtime.sendMessage().
+// Therefore use tabs.sendMessage().
 // ==================================================
 
 async function sendActionToP6(
@@ -1485,7 +1504,10 @@ function handleP6Result(
   result
 ) {
 
-  if (!result) {
+  if (
+    !result
+  ) {
+
     return;
   }
 
@@ -1598,6 +1620,7 @@ function handleConfirmationRequest(
 
       tabId:
         senderTabId
+
     }
   );
 
@@ -1620,9 +1643,6 @@ function handleConfirmationRequest(
 
   // ----------------------------------------------
   // Background → Popup
-  //
-  // Popup is an extension context, so runtime
-  // messaging is correct here.
   // ----------------------------------------------
 
   chrome.runtime
@@ -1721,8 +1741,7 @@ async function handleConfirmationResponse(
     // --------------------------------------------
     // P1 → P6
     //
-    // P6 confirmation listener lives in
-    // content.js.
+    // Confirmation listener lives in content.js.
     // --------------------------------------------
 
     await chrome.tabs.sendMessage(
@@ -1735,6 +1754,7 @@ async function handleConfirmationResponse(
         requestId,
 
         approved
+
       }
     );
 
@@ -1810,6 +1830,7 @@ function resetPrivacyCounters() {
 
         sent_to_ai_count:
           0
+
       }
 
     })
@@ -1843,6 +1864,7 @@ function sendPrivacyCounters(
     sent_to_ai_count:
       toP1.sent_to_ai_count ??
       0
+
   };
 
 
@@ -1879,6 +1901,7 @@ function sendPrivacyCounters(
 
       sent_to_ai_count:
         counters.sent_to_ai_count
+
     })
     .catch(() => {});
 }
@@ -2019,6 +2042,7 @@ async function saveRedactedScreenshot({
 
       createdAt:
         Date.now()
+
     };
 
 
@@ -2322,6 +2346,7 @@ async function runCaptureCycle(
           cycleId,
 
           timestamp
+
         });
 
 
@@ -2481,6 +2506,8 @@ async function runCaptureCycle(
 
       // ------------------------------------------
       // 13. P3 → P4
+      //
+      // P4 runs inside this service worker.
       // ------------------------------------------
 
       notifyPopup(
@@ -2533,8 +2560,8 @@ async function runCaptureCycle(
       // ------------------------------------------
       // 15. P4 → P5
       //
-      // Only the P4 filtered elements and sanitized
-      // screenshot are sent to P5.
+      // Only P4 filtered elements and the
+      // sanitized screenshot are sent to P5.
       // ------------------------------------------
 
       notifyPopup(
@@ -2623,7 +2650,7 @@ async function runCaptureCycle(
       // outer loop waits 5 seconds and then starts
       // a completely fresh capture.
       //
-      // waitForTaskTabToBeActive() will make sure
+      // waitForTaskTabToBeActive() ensures that
       // the correct tab is active before capture.
       // ------------------------------------------
 

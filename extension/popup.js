@@ -5,7 +5,7 @@
 
 
 /* =========================================================
-   DOM ELEMENTS
+   DOM
    ========================================================= */
 
 const taskInput =
@@ -61,16 +61,23 @@ const redactedPlaceholder =
     "redacted-placeholder"
   );
 
+const logo =
+  document.getElementById(
+    "obscura-logo"
+  );
+
 
 /* =========================================================
-   INITIALIZATION
+   INITIALIZE
    ========================================================= */
 
 document.addEventListener(
   "DOMContentLoaded",
   async () => {
 
-    setupEventListeners();
+    setupListeners();
+
+    setupLogo();
 
     await restoreState();
 
@@ -79,10 +86,54 @@ document.addEventListener(
 
 
 /* =========================================================
-   EVENT LISTENERS
+   LOGO
    ========================================================= */
 
-function setupEventListeners() {
+function setupLogo() {
+
+  /*
+   * Primary path.
+   */
+  const extensionLogo =
+    chrome.runtime.getURL(
+      "assets/obscura-logo.jpeg"
+    );
+
+  /*
+   * Use the extension-resolved URL.
+   */
+  logo.src = extensionLogo;
+
+
+  /*
+   * If the browser cannot load it, try the
+   * relative packaged path once more.
+   */
+  logo.onerror = () => {
+
+    if (
+      logo.dataset.fallbackUsed ===
+      "true"
+    ) {
+      return;
+    }
+
+    logo.dataset.fallbackUsed =
+      "true";
+
+    logo.src =
+      "./assets/obscura-logo.jpeg";
+
+  };
+
+}
+
+
+/* =========================================================
+   LISTENERS
+   ========================================================= */
+
+function setupListeners() {
 
   startBtn.addEventListener(
     "click",
@@ -117,11 +168,13 @@ function setupEventListeners() {
   chrome.runtime.onMessage.addListener(
     (message) => {
 
-      if (!message?.type) {
+      if (!message) {
         return;
       }
 
-      handleBackgroundMessage(message);
+      handleBackgroundMessage(
+        message
+      );
 
     }
   );
@@ -130,7 +183,7 @@ function setupEventListeners() {
 
 
 /* =========================================================
-   START CAPTURE
+   START
    ========================================================= */
 
 async function startCapture() {
@@ -171,7 +224,10 @@ async function startCapture() {
       });
 
 
-    if (response?.valid === false) {
+    if (
+      response &&
+      response.valid === false
+    ) {
 
       setRunning(false);
 
@@ -187,7 +243,13 @@ async function startCapture() {
 
 
     await chrome.storage.local.set({
-      obscura_task: task
+
+      obscura_task:
+        task,
+
+      obscura_capture_running:
+        true
+
     });
 
 
@@ -201,7 +263,6 @@ async function startCapture() {
 
     setRunning(false);
 
-
     setStatus(
       "Could not start capture.",
       "error"
@@ -213,7 +274,7 @@ async function startCapture() {
 
 
 /* =========================================================
-   STOP CAPTURE
+   STOP
    ========================================================= */
 
 async function stopCapture() {
@@ -234,6 +295,12 @@ async function stopCapture() {
   }
 
 
+  await chrome.storage.local.set({
+    obscura_capture_running:
+      false
+  });
+
+
   setRunning(false);
 
 
@@ -249,15 +316,42 @@ async function stopCapture() {
    BACKGROUND MESSAGE HANDLER
    ========================================================= */
 
-function handleBackgroundMessage(message) {
+function handleBackgroundMessage(
+  message
+) {
 
-  switch (message.type) {
+  const type =
+    message.type ||
+    message.event ||
+    "";
+
+
+  switch (type) {
 
     case "REDACTED_PREVIEW":
 
       updatePreview(message);
 
       updateCounters(message);
+
+      /*
+       * If the background doesn't provide a
+       * separate status, give the user a useful
+       * capture status.
+       */
+      if (
+        message.status ||
+        message.message
+      ) {
+
+        setStatus(
+          message.status ||
+          message.message,
+          message.statusType ||
+          "running"
+        );
+
+      }
 
       break;
 
@@ -268,6 +362,7 @@ function handleBackgroundMessage(message) {
 
       setStatus(
         message.status ||
+        message.message ||
         "Capture cycle running…",
         "running"
       );
@@ -281,6 +376,7 @@ function handleBackgroundMessage(message) {
 
       setStatus(
         message.status ||
+        message.message ||
         "Capture stopped.",
         "idle"
       );
@@ -290,32 +386,27 @@ function handleBackgroundMessage(message) {
 
     case "STATUS_UPDATE":
 
-      if (message.status) {
+      handleStatusMessage(
+        message
+      );
 
-        setStatus(
-          message.status,
-          message.statusType ||
-          "idle"
-        );
-
-      }
+      break;
 
 
-      if (
-        message.captureRunning !==
-        undefined
-      ) {
+    case "STATUS":
 
-        setRunning(
-          Boolean(
-            message.captureRunning
-          )
-        );
+      handleStatusMessage(
+        message
+      );
 
-      }
+      break;
 
 
-      updateCounters(message);
+    case "POPUP_STATUS":
+
+      handleStatusMessage(
+        message
+      );
 
       break;
 
@@ -324,17 +415,56 @@ function handleBackgroundMessage(message) {
 
       updateCounters(message);
 
+      if (
+        message.status ||
+        message.message
+      ) {
+
+        setStatus(
+          message.status ||
+          message.message,
+          message.statusType ||
+          "running"
+        );
+
+      }
+
       break;
 
 
     case "P6_ACTION_RESULT":
 
-      handleActionResult(message);
+      handleActionResult(
+        message
+      );
 
       break;
 
 
     default:
+
+      /*
+       * Some background messages may carry
+       * status/counters without a dedicated
+       * message type.
+       */
+      if (
+        message.status ||
+        message.message ||
+        message.pii_detected_count !==
+          undefined ||
+        message.redacted_count !==
+          undefined ||
+        message.sent_to_ai_count !==
+          undefined
+      ) {
+
+        handleStatusMessage(
+          message
+        );
+
+      }
+
       break;
 
   }
@@ -343,19 +473,109 @@ function handleBackgroundMessage(message) {
 
 
 /* =========================================================
-   PREVIEW UPDATE
+   STATUS MESSAGE
+   ========================================================= */
+
+function handleStatusMessage(
+  message
+) {
+
+  const text =
+    message.status ||
+    message.message ||
+    message.text ||
+    null;
+
+
+  const type =
+    message.statusType ||
+    message.status_type ||
+    "idle";
+
+
+  if (text) {
+
+    setStatus(
+      text,
+      normalizeStatusType(type)
+    );
+
+  }
+
+
+  if (
+    message.captureRunning !==
+    undefined
+  ) {
+
+    setRunning(
+      Boolean(
+        message.captureRunning
+      )
+    );
+
+  }
+
+
+  if (
+    message.capture_running !==
+    undefined
+  ) {
+
+    setRunning(
+      Boolean(
+        message.capture_running
+      )
+    );
+
+  }
+
+
+  updateCounters(message);
+
+}
+
+
+/* =========================================================
+   STATUS TYPE
+   ========================================================= */
+
+function normalizeStatusType(
+  type
+) {
+
+  if (
+    type === "running" ||
+    type === "success" ||
+    type === "error" ||
+    type === "paused"
+  ) {
+
+    return type;
+
+  }
+
+  return "idle";
+
+}
+
+
+/* =========================================================
+   PREVIEW
    ========================================================= */
 
 function updatePreview(message) {
 
   const original =
     message.originalScreenshot ||
+    message.original_screenshot ||
     message.original ||
     null;
 
 
   const redacted =
     message.redactedScreenshot ||
+    message.redacted_screenshot ||
     message.redacted ||
     null;
 
@@ -385,7 +605,7 @@ function updatePreview(message) {
 
 
 /* =========================================================
-   SHOW PREVIEW IMAGE
+   SHOW IMAGE
    ========================================================= */
 
 function showPreview(
@@ -416,10 +636,12 @@ function showPreview(
 
 
 /* =========================================================
-   IMAGE NORMALIZATION
+   NORMALIZE IMAGE
    ========================================================= */
 
-function normalizeImageData(data) {
+function normalizeImageData(
+  data
+) {
 
   if (!data) {
     return null;
@@ -436,7 +658,9 @@ function normalizeImageData(data) {
   }
 
 
-  if (typeof data === "string") {
+  if (
+    typeof data === "string"
+  ) {
 
     return (
       "data:image/png;base64," +
@@ -455,7 +679,9 @@ function normalizeImageData(data) {
    COUNTERS
    ========================================================= */
 
-function updateCounters(message) {
+function updateCounters(
+  message
+) {
 
   if (!message) {
     return;
@@ -463,17 +689,22 @@ function updateCounters(message) {
 
 
   const counters =
-    message.counters || {};
+    message.counters ||
+    message.privacy ||
+    {};
 
 
   const pii =
     message.pii_detected_count ??
     message.piiDetected ??
-    counters.piiDetected;
+    message.pii_detected ??
+    counters.piiDetected ??
+    counters.pii_detected;
 
 
   const redacted =
     message.redacted_count ??
+    message.redactedCount ??
     message.redacted ??
     counters.redacted;
 
@@ -481,29 +712,43 @@ function updateCounters(message) {
   const sent =
     message.sent_to_ai_count ??
     message.sentToAI ??
-    counters.sentToAI;
+    message.sent_to_ai ??
+    counters.sentToAI ??
+    counters.sent_to_ai;
 
 
-  if (typeof pii === "number") {
+  if (
+    typeof pii === "number"
+  ) {
 
     piiCount.textContent =
-      Math.max(0, pii);
+      String(
+        Math.max(0, pii)
+      );
 
   }
 
 
-  if (typeof redacted === "number") {
+  if (
+    typeof redacted === "number"
+  ) {
 
     redactedCount.textContent =
-      Math.max(0, redacted);
+      String(
+        Math.max(0, redacted)
+      );
 
   }
 
 
-  if (typeof sent === "number") {
+  if (
+    typeof sent === "number"
+  ) {
 
     sentCount.textContent =
-      Math.max(0, sent);
+      String(
+        Math.max(0, sent)
+      );
 
   }
 
@@ -514,10 +759,12 @@ function updateCounters(message) {
 
 
 /* =========================================================
-   P6 ACTION RESULT
+   P6 RESULT
    ========================================================= */
 
-function handleActionResult(message) {
+function handleActionResult(
+  message
+) {
 
   const result =
     message.result ||
@@ -581,7 +828,9 @@ function handleActionResult(message) {
    RUNNING STATE
    ========================================================= */
 
-function setRunning(running) {
+function setRunning(
+  running
+) {
 
   running =
     Boolean(running);
@@ -616,7 +865,7 @@ function setRunning(running) {
 
 
 /* =========================================================
-   STATUS
+   STATUS UI
    ========================================================= */
 
 function setStatus(
@@ -624,8 +873,13 @@ function setStatus(
   type = "idle"
 ) {
 
+  if (!text) {
+    return;
+  }
+
+
   statusText.textContent =
-    text;
+    String(text);
 
 
   statusBar.classList.remove(
@@ -638,7 +892,7 @@ function setStatus(
 
 
   statusBar.classList.add(
-    type
+    normalizeStatusType(type)
   );
 
 
@@ -655,7 +909,9 @@ function setStatus(
       "error"
     );
 
-  } else if (type === "running") {
+  } else if (
+    type === "running"
+  ) {
 
     headerStatusDot.classList.add(
       "running"
@@ -673,10 +929,10 @@ function setStatus(
   chrome.storage.local.set({
 
     obscura_status:
-      text,
+      String(text),
 
     obscura_status_type:
-      type
+      normalizeStatusType(type)
 
   });
 
@@ -717,7 +973,9 @@ async function restoreState() {
     ) {
 
       piiCount.textContent =
-        state.obscura_pii_detected;
+        String(
+          state.obscura_pii_detected
+        );
 
     }
 
@@ -728,7 +986,9 @@ async function restoreState() {
     ) {
 
       redactedCount.textContent =
-        state.obscura_redacted;
+        String(
+          state.obscura_redacted
+        );
 
     }
 
@@ -739,11 +999,16 @@ async function restoreState() {
     ) {
 
       sentCount.textContent =
-        state.obscura_sent_to_ai;
+        String(
+          state.obscura_sent_to_ai
+        );
 
     }
 
 
+    /*
+     * Restore the last status.
+     */
     if (state.obscura_status) {
 
       setStatus(
@@ -755,6 +1020,9 @@ async function restoreState() {
     }
 
 
+    /*
+     * Restore running state.
+     */
     setRunning(
       Boolean(
         state.obscura_capture_running

@@ -2,16 +2,22 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
 
   <title>Obscura</title>
 
-  <link rel="stylesheet" href="./popup.css">
+  <link
+    rel="stylesheet"
+    href="./popup.css"
+  >
 </head>
 
 <body>
 
-  <div class="popup-container">
+  <main class="popup-container">
 
     <!-- ================= HEADER ================= -->
 
@@ -20,17 +26,24 @@
       <div class="brand">
 
         <div class="logo-wrapper">
+
           <img
             id="obscura-logo"
             class="logo"
             src="./assets/obscura-logo.jpeg"
-            alt="Obscura logo"
+            alt="Obscura"
           >
+
         </div>
 
         <div class="brand-text">
+
           <h1>Obscura</h1>
-          <p>Privacy-preserving browser agent</p>
+
+          <p>
+            Privacy-preserving browser agent
+          </p>
+
         </div>
 
       </div>
@@ -48,8 +61,8 @@
     <section class="task-section">
 
       <label
-        for="task-input"
         class="section-label"
+        for="task-input"
       >
         Task
       </label>
@@ -97,7 +110,10 @@
         class="status-dot"
       ></span>
 
-      <span id="status-text">
+      <span
+        id="status-text"
+        class="status-text"
+      >
         Idle. Enter a task and click start.
       </span>
 
@@ -158,15 +174,17 @@
     </section>
 
 
-    <!-- ================= CAPTURE PREVIEW ================= -->
+    <!-- ================= PREVIEW ================= -->
 
     <section class="preview-section">
 
       <div class="preview-header">
 
-        <div class="preview-title">
+        <div class="preview-heading">
 
-          <h2>Capture preview</h2>
+          <h2>
+            Capture preview
+          </h2>
 
           <p>
             Latest frame before and after redaction
@@ -177,16 +195,18 @@
 
         <div class="protected-badge">
 
-          <span class="shield-icon">♢</span>
+          <span class="shield">
+            ♢
+          </span>
 
-          <span>Protected</span>
+          <span>
+            Protected
+          </span>
 
         </div>
 
       </div>
 
-
-      <!-- Preview labels -->
 
       <div class="preview-labels">
 
@@ -194,7 +214,9 @@
 
           <span class="label-dot original-dot"></span>
 
-          <span>Original</span>
+          <span>
+            Original
+          </span>
 
         </div>
 
@@ -203,14 +225,14 @@
 
           <span class="label-dot redacted-dot"></span>
 
-          <span>Redacted</span>
+          <span>
+            Redacted
+          </span>
 
         </div>
 
       </div>
 
-
-      <!-- Preview cards -->
 
       <div class="preview-grid">
 
@@ -262,13 +284,17 @@
 
     <footer class="footer">
 
-      <span>Obscura</span>
+      <span>
+        Obscura
+      </span>
 
-      <span>P1 capture pipeline</span>
+      <span>
+        P1 capture pipeline
+      </span>
 
     </footer>
 
-  </div>
+  </main>
 
 
   <script src="./popup.js"></script>

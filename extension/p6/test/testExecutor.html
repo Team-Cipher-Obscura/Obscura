@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>P6 Executor Tests</title>
+</head>
+
+<body>
+  <h1>P6 Executor Tests</h1>
+
+  <p>
+    Open the browser console and verify that all assertions pass.
+  </p>
+
+  <input id="textInput" type="text">
+  <input id="passwordInput" type="password">
+  <textarea id="textArea"></textarea>
+
+  <button id="clickButton" type="button">
+    Click Test
+  </button>
+
+  <script type="module">
+    import {
+      executeAction,
+      isAllowedNavigationUrl
+    } from "../executor.js";
+
+    function assert(condition, message) {
+      console.assert(
+        condition,
+        message
+      );
+
+      if (condition) {
+        console.log(`PASS: ${message}`);
+      } else {
+        console.error(`FAIL: ${message}`);
+      }
+    }
+
+    async function runTests() {
+      const clickButton =
+        document.getElementById(
+          "clickButton"
+        );
+
+      const textInput =
+        document.getElementById(
+          "textInput"
+        );
+
+      const passwordInput =
+        document.getElementById(
+          "passwordInput"
+        );
+
+      const textArea =
+        document.getElementById(
+          "textArea"
+        );
+
+      let clickCount = 0;
+
+      clickButton.addEventListener(
+        "click",
+        () => {
+          clickCount += 1;
+        }
+      );
+
+      /*
+       * 1. Successful click
+       */
+      const clickResult =
+        await executeAction(
+          {
+            action: "click",
+            target_id: "clickButton",
+            confidence: 0.99
+          },
+          clickButton
+        );
+
+      assert(
+        clickResult.status === "EXECUTED",
+        "click should execute successfully"
+      );
+
+      assert(
+        clickResult.action === "click",
+        "click result should report action"
+      );
+
+      assert(
+        clickResult.target_id === "clickButton",
+        "click result should report target_id"
+      );
+
+      assert(
+        clickCount === 1,
+        "click handler should run exactly once"
+      );
+
+      /*
+       * 2. Click with missing target
+       */
+      const missingClickResult =
+        await executeAction(
+          {
+            action: "click",
+            target_id: "missingButton",
+            confidence: 0.99
+          },
+          null
+        );
+
+      assert(
+        missingClickResult.status === "FAILED",
+        "missing click target should fail"
+      );
+
+      assert(
+        missingClickResult.reason === "TARGET_NOT_FOUND",
+        "missing click target should report TARGET_NOT_FOUND"
+      );
+
+      /*
+       * 3. Successful text typing
+       */
+      const typeResult =
+        await executeAction(
+          {
+            action: "type",
+            target_id: "textInput",
+            confidence: 0.99,
+            metadata: {
+              text: "hello world"
+            }
+          },
+          textInput
+        );
+
+      assert(
+        typeResult.status === "EXECUTED",
+        "text input should execute successfully"
+      );
+
+      assert(
+        textInput.value === "hello world",
+        "text input should receive the requested value"
+      );
+
+      /*
+       * 4. Successful password typing
+       */
+      const passwordResult =
+        await executeAction(
+          {
+            action: "type",
+            target_id: "passwordInput",
+            confidence: 0.99,
+            metadata: {
+              text: "secret"
+            }
+          },
+          passwordInput
+        );
+
+      assert(
+        passwordResult.status === "EXECUTED",
+        "password input should execute successfully"
+      );
+
+      assert(
+        passwordInput.value === "secret",
+        "password input should receive the requested value"
+      );
+
+      /*
+       * 5. Successful textarea typing
+       */
+      const textareaResult =
+        await executeAction(
+          {
+            action: "type",
+            target_id: "textArea",
+            confidence: 0.99,
+            metadata: {
+              text: "textarea value"
+            }
+          },
+          textArea
+        );
+
+      assert(
+        textareaResult.status === "EXECUTED",
+        "textarea typing should execute successfully"
+      );
+
+      assert(
+        textArea.value === "textarea value",
+        "textarea should receive the requested value"
+      );
+
+      /*
+       * 6. Invalid type target
+       */
+      const invalidTypeResult =
+        await executeAction(
+          {
+            action: "type",
+            target_id: "clickButton",
+            confidence: 0.99,
+            metadata: {
+              text: "should fail"
+            }
+          },
+          clickButton
+        );
+
+      assert(
+        invalidTypeResult.status === "FAILED",
+        "typing into a button should fail"
+      );
+
+      assert(
+        invalidTypeResult.reason === "INVALID_TYPE_TARGET",
+        "invalid type target should report INVALID_TYPE_TARGET"
+      );
+
+      /*
+       * 7. Scroll
+       *
+       * This only verifies that the executor accepts the action and
+       * returns a real execution result object.
+       */
+      const scrollResult =
+        await executeAction(
+          {
+            action: "scroll",
+            confidence: 0.99,
+            metadata: {
+              amount: 100
+            }
+          }
+        );
+
+      assert(
+        scrollResult.status === "EXECUTED",
+        "scroll should execute successfully"
+      );
+
+      /*
+       * 8. Wait
+       *
+       * executeAction is async, so this must be awaited.
+       */
+      const waitStart =
+        performance.now();
+
+      const waitResult =
+        await executeAction(
+          {
+            action: "wait",
+            confidence: 0.99,
+            metadata: {
+              duration: 25
+            }
+          }
+        );
+
+      const waitElapsed =
+        performance.now() - waitStart;
+
+      assert(
+        waitResult.status === "EXECUTED",
+        "wait should execute successfully"
+      );
+
+      assert(
+        waitElapsed >= 20,
+        "wait should actually delay execution"
+      );
+
+      /*
+       * 9. Unsupported action
+       */
+      const unsupportedResult =
+        await executeAction(
+          {
+            action: "delete",
+            target_id: "clickButton",
+            confidence: 0.99
+          },
+          clickButton
+        );
+
+      assert(
+        unsupportedResult.status === "FAILED",
+        "unsupported action should fail"
+      );
+
+      assert(
+        unsupportedResult.reason === "UNSUPPORTED_ACTION",
+        "unsupported action should report UNSUPPORTED_ACTION"
+      );
+
+      /*
+       * 10. Navigation URL helper
+       */
+      assert(
+        isAllowedNavigationUrl(
+          "https://example.com"
+        ) === true,
+        "https navigation should be allowed"
+      );
+
+      assert(
+        isAllowedNavigationUrl(
+          "http://example.com"
+        ) === true,
+        "http navigation should be allowed"
+      );
+
+      assert(
+        isAllowedNavigationUrl(
+          "javascript:alert(1)"
+        ) === false,
+        "javascript navigation should be rejected"
+      );
+
+      assert(
+        isAllowedNavigationUrl(
+          "data:text/html,test"
+        ) === false,
+        "data navigation should be rejected"
+      );
+
+      console.log(
+        "P6 executor test suite completed."
+      );
+    }
+
+    runTests().catch((error) => {
+      console.error(
+        "P6 executor test suite crashed:",
+        error
+      );
+    });
+  </script>
+</body>
+</html>

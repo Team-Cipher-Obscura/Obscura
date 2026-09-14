@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>P6 Phase 5 Benchmark</title>
+
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 24px;
+      line-height: 1.5;
+    }
+
+    button {
+      margin-right: 8px;
+      margin-bottom: 16px;
+      padding: 8px 12px;
+    }
+
+    .benchmark-case {
+      margin: 12px 0;
+      padding: 12px;
+      border: 1px solid #ccc;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    #covered-container {
+      position: relative;
+      width: 220px;
+      height: 60px;
+      margin-bottom: 20px;
+    }
+
+    #bench_covered {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 220px;
+      height: 60px;
+    }
+
+    #bench_cover {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 220px;
+      height: 60px;
+      z-index: 10;
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #f5f5f5;
+      padding: 16px;
+      border-radius: 6px;
+    }
+
+    .pass {
+      color: green;
+      font-weight: 700;
+    }
+
+    .fail {
+      color: red;
+      font-weight: 700;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>P6 Phase 5 — Evaluation / Benchmarking</h1>
+
+  <p>
+    This page runs the evaluation subsystem independently
+    from the live action pipeline.
+  </p>
+
+  <button id="runBenchmark">
+    Run Phase 5 Benchmark
+  </button>
+
+  <button id="downloadBenchmark" disabled>
+    Download JSON
+  </button>
+
+  <h2>Ground-truth DOM</h2>
+
+  <div class="benchmark-case">
+    <button
+      id="bench_safe_button"
+      data-agent-id="bench_safe_button"
+    >
+      Safe Button
+    </button>
+  </div>
+
+  <div class="benchmark-case">
+    <button
+      id="bench_submit_button"
+      data-agent-id="bench_submit_button"
+    >
+      Submit
+    </button>
+  </div>
+
+  <div class="benchmark-case">
+    <input
+      id="bench_password"
+      data-agent-id="bench_password"
+      type="password"
+      autocomplete="current-password"
+      value=""
+    >
+  </div>
+
+  <div class="benchmark-case">
+    <button
+      id="bench_normal"
+      data-agent-id="bench_normal"
+    >
+      Normal Target
+    </button>
+  </div>
+
+  <div class="benchmark-case">
+    <button
+      id="bench_hidden"
+      data-agent-id="bench_hidden"
+      class="hidden"
+    >
+      Hidden Target
+    </button>
+  </div>
+
+  <div class="benchmark-case">
+    <button
+      id="bench_disabled"
+      data-agent-id="bench_disabled"
+      disabled
+    >
+      Disabled Target
+    </button>
+  </div>
+
+  <div class="benchmark-case">
+    <button
+      id="bench_aria_disabled"
+      data-agent-id="bench_aria_disabled"
+      aria-disabled="true"
+    >
+      ARIA Disabled Target
+    </button>
+  </div>
+
+  <div
+    id="covered-container"
+    class="benchmark-case"
+  >
+    <button
+      id="bench_covered"
+      data-agent-id="bench_covered"
+    >
+      Covered Target
+    </button>
+
+    <div id="bench_cover"></div>
+  </div>
+
+  <div class="benchmark-case">
+    <p>
+      The stale target case intentionally does not have
+      an element with data-agent-id="bench_stale".
+    </p>
+  </div>
+
+  <h2>Benchmark Results</h2>
+
+  <pre id="summary">Not run yet.</pre>
+
+  <h2>Raw JSON</h2>
+
+  <pre id="json">Not run yet.</pre>
+
+
+  <script type="module">
+
+    import {
+      runPhase5Benchmark,
+      downloadBenchmarkJson
+    } from "../evaluation/benchmark.js";
+
+
+    const runButton =
+      document.getElementById(
+        "runBenchmark"
+      );
+
+    const downloadButton =
+      document.getElementById(
+        "downloadBenchmark"
+      );
+
+    const summary =
+      document.getElementById(
+        "summary"
+      );
+
+    const json =
+      document.getElementById(
+        "json"
+      );
+
+
+    let latestBenchmark = null;
+
+
+    function formatPercent(value) {
+      if (
+        typeof value !== "number"
+      ) {
+        return "N/A";
+      }
+
+      return `${(
+        value * 100
+      ).toFixed(2)}%`;
+    }
+
+
+    function renderSummary(result) {
+
+      const target =
+        result.target_resolution;
+
+      const safety =
+        result.safety_gate;
+
+      const pii =
+        result.pii;
+
+      const redaction =
+        result.redaction;
+
+      const latency =
+        result.latency;
+
+      const repeated =
+        result.repeated_workload;
+
+
+      summary.textContent = [
+        "========================================",
+        "P6 PHASE 5 BENCHMARK",
+        "========================================",
+        "",
+        `Total benchmark time: ${
+          result.benchmark.total_duration_ms
+        } ms`,
+        "",
+        "TARGET RESOLUTION",
+        `  Correct: ${
+          target.correct
+        } / ${
+          target.total
+        }`,
+        `  Accuracy: ${
+          formatPercent(
+            target.accuracy
+          )
+        }`,
+        "",
+        "SAFETY GATE",
+        `  Correct: ${
+          safety.correct
+        } / ${
+          safety.total
+        }`,
+        `  Accuracy: ${
+          formatPercent(
+            safety.accuracy
+          )
+        }`,
+        "",
+        "P3 PII PRECISION / RECALL",
+        `  Available: ${
+          pii.available
+        }`,
+        `  Precision: ${
+          pii.precision === null
+            ? "N/A"
+            : formatPercent(
+                pii.precision
+              )
+        }`,
+        `  Recall: ${
+          pii.recall === null
+            ? "N/A"
+            : formatPercent(
+                pii.recall
+              )
+        }`,
+        "",
+        "REDACTION",
+        `  Available: ${
+          redaction.available
+        }`,
+        `  Accuracy: ${
+          redaction.accuracy === null
+            ? "N/A"
+            : formatPercent(
+                redaction.accuracy
+              )
+        }`,
+        `  Under-redaction: ${
+          redaction.under_redaction
+        }`,
+        `  Over-redaction: ${
+          redaction.over_redaction
+        }`,
+        "",
+        "LATENCY",
+        `  Average safety evaluation: ${
+          latency.average_safety_evaluation_ms
+        } ms`,
+        "",
+        "REPEATED WORKLOAD",
+        `  Iterations: ${
+          repeated.iterations
+        }`,
+        `  Total: ${
+          repeated.total_duration_ms
+        } ms`,
+        `  Average resolution: ${
+          repeated.average_resolution_ms
+        } ms`,
+        "",
+        "RESOURCE AVAILABILITY",
+        `  Memory API: ${
+          result.resources.after.memory.available
+        }`,
+        `  GPU API: ${
+          result.resources.after.gpu.available
+        }`,
+        `  CPU utilization: unavailable`,
+        "",
+        "========================================"
+      ].join("\n");
+    }
+
+
+    runButton.addEventListener(
+      "click",
+      () => {
+
+        runButton.disabled = true;
+
+        summary.textContent =
+          "Running benchmark...";
+
+        json.textContent =
+          "Running benchmark...";
+
+        try {
+
+          latestBenchmark =
+            runPhase5Benchmark({
+              repeatedIterations: 100
+            });
+
+          renderSummary(
+            latestBenchmark
+          );
+
+          json.textContent =
+            JSON.stringify(
+              latestBenchmark,
+              null,
+              2
+            );
+
+          downloadButton.disabled =
+            false;
+
+          console.log(
+            "P6 Phase 5 benchmark:",
+            latestBenchmark
+          );
+
+        } catch (error) {
+
+          console.error(
+            "Phase 5 benchmark failed:",
+            error
+          );
+
+          summary.textContent =
+            `Benchmark failed:\n${
+              error.message
+            }`;
+
+          json.textContent =
+            JSON.stringify(
+              {
+                error:
+                  error.message
+              },
+              null,
+              2
+            );
+
+        } finally {
+
+          runButton.disabled =
+            false;
+        }
+      }
+    );
+
+
+    downloadButton.addEventListener(
+      "click",
+      () => {
+
+        if (!latestBenchmark) {
+          return;
+        }
+
+        downloadBenchmarkJson(
+          latestBenchmark
+        );
+      }
+    );
+
+  </script>
+
+</body>
+</html>

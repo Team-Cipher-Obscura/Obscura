@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>P6 Risky Action Rules Test</title>
+</head>
+
+<body>
+
+  <h1>P6 Risky Action Rules Test</h1>
+
+  <button
+    data-agent-id="el_safe"
+  >
+    Continue
+  </button>
+
+  <button
+    data-agent-id="el_delete"
+  >
+    Delete Account
+  </button>
+
+  <button
+    data-agent-id="el_wireless"
+  >
+    Wireless Settings
+  </button>
+
+  <input
+    data-agent-id="el_password_type"
+    type="password"
+  >
+
+  <input
+    data-agent-id="el_password_current"
+    type="text"
+    autocomplete="current-password"
+  >
+
+  <input
+    data-agent-id="el_password_new"
+    type="text"
+    autocomplete="new-password"
+  >
+
+  <script type="module">
+
+    import {
+      classifyRisk,
+      isPasswordField,
+      _matchesRiskyKeywordForTesting
+    } from "../riskyActionRules.js";
+
+
+    function assert(
+      condition,
+      message
+    ) {
+      console.assert(
+        condition,
+        message
+      );
+
+      if (!condition) {
+        throw new Error(message);
+      }
+    }
+
+
+    // -----------------------------------------
+    // 1. Safe click
+    // -----------------------------------------
+
+    const safeElement =
+      document.querySelector(
+        '[data-agent-id="el_safe"]'
+      );
+
+
+    assert(
+      classifyRisk(
+        {
+          action: "click"
+        },
+        safeElement
+      ) === "SAFE",
+      "Normal click should be safe"
+    );
+
+
+    // -----------------------------------------
+    // 2. Delete click
+    // -----------------------------------------
+
+    const deleteElement =
+      document.querySelector(
+        '[data-agent-id="el_delete"]'
+      );
+
+
+    assert(
+      classifyRisk(
+        {
+          action: "click"
+        },
+        deleteElement
+      ) === "CONFIRM",
+      "Delete click should require confirmation"
+    );
+
+
+    // -----------------------------------------
+    // 3. Word boundary
+    //
+    // "wire" must NOT match "wireless".
+    // -----------------------------------------
+
+    assert(
+      _matchesRiskyKeywordForTesting(
+        "Wireless Settings"
+      ) === false,
+      "\"wire\" must not match \"wireless\""
+    );
+
+
+    assert(
+      _matchesRiskyKeywordForTesting(
+        "Wire Money"
+      ) === true,
+      "\"wire\" should match the standalone word"
+    );
+
+
+    // -----------------------------------------
+    // 4. type=password
+    // -----------------------------------------
+
+    const passwordByType =
+      document.querySelector(
+        '[data-agent-id="el_password_type"]'
+      );
+
+
+    assert(
+      isPasswordField(
+        passwordByType
+      ) === true,
+      "type=password must be detected"
+    );
+
+
+    assert(
+      classifyRisk(
+        {
+          action: "type"
+        },
+        passwordByType
+      ) === "CONFIRM",
+      "Typing into password field must require confirmation"
+    );
+
+
+    // -----------------------------------------
+    // 5. autocomplete=current-password
+    //
+    // This catches the Phase 6 narrowing regression.
+    // -----------------------------------------
+
+    const currentPassword =
+      document.querySelector(
+        '[data-agent-id="el_password_current"]'
+      );
+
+
+    assert(
+      isPasswordField(
+        currentPassword
+      ) === true,
+      "autocomplete=current-password must be detected"
+    );
+
+
+    assert(
+      classifyRisk(
+        {
+          action: "type"
+        },
+        currentPassword
+      ) === "CONFIRM",
+      "Typing into current-password field must require confirmation"
+    );
+
+
+    // -----------------------------------------
+    // 6. autocomplete=new-password
+    // -----------------------------------------
+
+    const newPassword =
+      document.querySelector(
+        '[data-agent-id="el_password_new"]'
+      );
+
+
+    assert(
+      isPasswordField(
+        newPassword
+      ) === true,
+      "autocomplete=new-password must be detected"
+    );
+
+
+    assert(
+      classifyRisk(
+        {
+          action: "type"
+        },
+        newPassword
+      ) === "CONFIRM",
+      "Typing into new-password field must require confirmation"
+    );
+
+
+    console.log(
+      "===================================="
+    );
+
+    console.log(
+      "P6 Risky Action Rules tests passed."
+    );
+
+    console.log(
+      "===================================="
+    );
+
+  </script>
+
+</body>
+
+</html>

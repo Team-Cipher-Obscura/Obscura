@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>P6 Action Pipeline Test</title>
+</head>
+
+<body>
+
+  <h1>P6 Action Pipeline Test</h1>
+
+  <input
+    data-agent-id="el_name"
+    id="nameInput"
+    placeholder="Name"
+  >
+
+  <p id="output">
+    Nothing clicked yet.
+  </p>
+
+  <button
+    data-agent-id="el_safe"
+    id="safeButton"
+  >
+    Click Me
+  </button>
+
+  <button
+    data-agent-id="el_delete"
+    id="deleteButton"
+  >
+    Delete Account
+  </button>
+
+  <input
+    data-agent-id="el_password"
+    type="password"
+  >
+
+  <script type="module">
+
+    import {
+      processAction
+    } from "../actionPipeline.js";
+
+    import {
+      update
+    } from "../sensitiveRegistry.js";
+
+
+    // -----------------------------------------
+    // Test helpers
+    // -----------------------------------------
+
+    function assert(
+      condition,
+      message
+    ) {
+      console.assert(
+        condition,
+        message
+      );
+
+      if (!condition) {
+        throw new Error(message);
+      }
+    }
+
+
+    // -----------------------------------------
+    // Mock P3 sensitive information
+    // -----------------------------------------
+
+    update({
+      sensitive_element_ids: [
+        "el_password"
+      ],
+
+      types: {
+        el_password:
+          "password_field"
+      }
+    });
+
+
+    // -----------------------------------------
+    // Button click listener
+    // -----------------------------------------
+
+    document
+      .getElementById("safeButton")
+      .addEventListener(
+        "click",
+        () => {
+          document
+            .getElementById("output")
+            .textContent =
+            "Button clicked successfully.";
+        }
+      );
+
+
+    // -----------------------------------------
+    // Mock P1 confirmation sender
+    // -----------------------------------------
+
+    const sentMessages = [];
+
+    let confirmationRequest = null;
+
+    function sendMessage(message) {
+      sentMessages.push(message);
+
+      if (
+        message.type ===
+        "P6_CONFIRMATION_REQUEST"
+      ) {
+        confirmationRequest =
+          message;
+      }
+    }
+
+
+    // -----------------------------------------
+    // 1. SAFE CLICK
+    // -----------------------------------------
+
+    const safeClick = {
+      action: "click",
+      target_id: "el_safe",
+      confidence: 0.95,
+      metadata: {}
+    };
+
+
+    const safeResult =
+      await processAction(
+        safeClick,
+        sendMessage
+      );
+
+
+    console.log(
+      "Safe click:",
+      safeResult
+    );
+
+
+    assert(
+      safeResult.status === "EXECUTED",
+      "Safe click should execute"
+    );
+
+
+    // -----------------------------------------
+    // 2. RISKY DELETE
+    //
+    // This is the critical Phase 6 regression test.
+    //
+    // The pipeline must:
+    //
+    //   evaluate
+    //   -> request confirmation
+    //   -> send P6_CONFIRMATION_REQUEST
+    //   -> wait
+    //
+    // It must NOT silently return false because
+    // sendMessage was dropped.
+    // -----------------------------------------
+
+    confirmationRequest = null;
+
+    const deleteAction = {
+      action: "click",
+      target_id: "el_delete",
+      confidence: 0.95,
+      metadata: {}
+    };
+
+
+    const deletePromise =
+      processAction(
+        deleteAction,
+        sendMessage
+      );
+
+
+    // Let the confirmation request reach
+    // the mock sender.
+    await new Promise(
+      (resolve) =>
+        setTimeout(resolve, 0)
+    );
+
+
+    assert(
+      confirmationRequest !== null,
+      "Risky action must send a confirmation request"
+    );
+
+
+    assert(
+      confirmationRequest.type ===
+        "P6_CONFIRMATION_REQUEST",
+      "Wrong confirmation message type"
+    );
+
+
+    assert(
+      confirmationRequest.requestId,
+      "Confirmation request must contain requestId"
+    );
+
+
+    console.log(
+      "ACTUAL targetSummary:",
+      JSON.stringify(
+        confirmationRequest.targetSummary
+      )
+    );
+
+    assert(
+      confirmationRequest.targetSummary ===
+        "Delete Account",
+      "Confirmation should contain a safe target summary"
+    );
+
+
+    // Approve the confirmation.
+    //
+    // We import the handler dynamically so this test exercises
+    // the exact same response path used by confirmationFlow.
+    const {
+      handleConfirmationResponse
+    } = await import(
+      "../confirmationFlow.js"
+    );
+
+
+    handleConfirmationResponse({
+      type:
+        "P6_CONFIRMATION_RESPONSE",
+
+      requestId:
+        confirmationRequest.requestId,
+
+      approved: true
+    });
+
+
+    const deleteResult =
+      await deletePromise;
+
+
+    console.log(
+      "Delete after approval:",
+      deleteResult
+    );
+
+
+    assert(
+      deleteResult.status ===
+        "EXECUTED",
+      "Approved risky action should execute after fresh safety check"
+    );
+
+
+    // -----------------------------------------
+    // 3. P3 SENSITIVE ELEMENT
+    // -----------------------------------------
+
+    const sensitiveAction = {
+      action: "click",
+      target_id: "el_password",
+      confidence: 0.99,
+      metadata: {}
+    };
+
+
+    const sensitiveResult =
+      await processAction(
+        sensitiveAction,
+        sendMessage
+      );
+
+
+    console.log(
+      "Sensitive element:",
+      sensitiveResult
+    );
+
+
+    assert(
+      sensitiveResult.status ===
+        "BLOCKED",
+      "P3-sensitive element MUST be blocked"
+    );
+
+
+    // -----------------------------------------
+    // 4. INVALID TARGET
+    // -----------------------------------------
+
+    const invalidAction = {
+      action: "click",
+      target_id: "el_missing",
+      confidence: 0.95,
+      metadata: {}
+    };
+
+
+    const invalidResult =
+      await processAction(
+        invalidAction,
+        sendMessage
+      );
+
+
+    console.log(
+      "Invalid target:",
+      invalidResult
+    );
+
+
+    assert(
+      invalidResult.status ===
+        "BLOCKED",
+      "Invalid target should be blocked"
+    );
+
+
+    // -----------------------------------------
+    // 5. SCROLL
+    // -----------------------------------------
+
+    const scrollAction = {
+      action: "scroll",
+      target_id: null,
+      confidence: 0.90,
+      metadata: {
+        direction: "down",
+        amount: 300
+      }
+    };
+
+
+    const scrollResult =
+      await processAction(
+        scrollAction,
+        sendMessage
+      );
+
+
+    console.log(
+      "Scroll:",
+      scrollResult
+    );
+
+
+    assert(
+      scrollResult.status ===
+        "EXECUTED",
+      "Scroll should execute"
+    );
+
+
+    console.log(
+      "===================================="
+    );
+
+    console.log(
+      "P6 Action Pipeline tests passed."
+    );
+
+    console.log(
+      "===================================="
+    );
+
+  </script>
+
+</body>
+
+</html>

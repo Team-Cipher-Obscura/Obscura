@@ -1,0 +1,17 @@
+{
+  "frame_id": "f_00042",
+  "task": "Search Flights",
+  "elements": [
+    {
+      "id": "el_d24g9b",
+      "tag": "button",
+      "type": null,
+      "role": "button",
+      "text": "Search Flights",
+      "bbox": [120, 300, 150, 40],
+      "confidence": 0.97,
+      "sensitive": false,
+      "changed": false
+    }
+  ]
+}

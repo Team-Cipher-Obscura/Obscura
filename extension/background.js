@@ -31,18 +31,9 @@
 // Switching to another tab does NOT move the task to the
 // new tab.
 //
-// IMPORTANT CHROME CAPTURE LIMITATION:
-//
 // chrome.tabs.captureVisibleTab() captures the currently
-// visible tab. Therefore, P1 must not pretend that it can
-// capture an inactive task tab using the current API.
-//
-// If the user switches away from the task tab, P1 waits
-// before starting a NEW screenshot cycle. Once the user
-// returns to the task tab, capture resumes.
-//
-// The current in-progress cycle is allowed to finish using
-// the screenshot it already captured.
+// visible tab. Therefore P1 waits while the task tab is
+// inactive and resumes when the user returns to it.
 //
 // P5 may return:
 //   click
@@ -56,14 +47,60 @@
 
 
 // ==================================================
+// Load P4
+// ==================================================
+//
+// p4/vite.config.js builds:
+//
+//   p4Listener.js
+//        ↓
+//   extension/dist/p4-listener.js
+//
+// The bundle exposes:
+//
+//   globalThis.handleP4Input
+//
+// P4 is therefore executed inside the P1 background
+// service-worker context.
+//
+// ==================================================
+
+importScripts("./dist/p4-listener.js");
+
+
+// ==================================================
+// Verify P4 loaded
+// ==================================================
+
+if (
+  typeof globalThis.handleP4Input !==
+  "function"
+) {
+
+  console.error(
+    "[Obscura][P4] P4 listener failed to load."
+  );
+
+} else {
+
+  console.log(
+    "[Obscura][P4] P4 listener loaded successfully."
+  );
+}
+
+
+// ==================================================
 // Configuration
 // ==================================================
 
-const CAPTURE_INTERVAL_MS = 5000;
+const CAPTURE_INTERVAL_MS =
+  5000;
 
-const MAX_CAPTURE_ATTEMPTS = 2;
+const MAX_CAPTURE_ATTEMPTS =
+  2;
 
-const MAX_SAVED_PAIRS = 15;
+const MAX_SAVED_PAIRS =
+  15;
 
 const P5_ENDPOINT =
   "http://localhost:8000/agent/reason";
@@ -73,32 +110,38 @@ const P5_ENDPOINT =
 // Capture state
 // ==================================================
 
-let captureRunning = false;
+let captureRunning =
+  false;
 
-let currentTask = null;
+let currentTask =
+  null;
 
-let currentCycleId = null;
+let currentCycleId =
+  null;
 
 
 // ==================================================
 // Task tab state
 //
-// The task is bound to the tab where the user
-// started the task.
+// The task is permanently bound to the tab where
+// the task was started.
 //
 // These values remain unchanged across cycles.
 // ==================================================
 
-let taskTabId = null;
+let taskTabId =
+  null;
 
-let taskWindowId = null;
+let taskWindowId =
+  null;
 
 
 // ==================================================
 // Confirmation state
 // ==================================================
 
-const pendingConfirmations = new Map();
+const pendingConfirmations =
+  new Map();
 
 
 // ==================================================
@@ -106,7 +149,11 @@ const pendingConfirmations = new Map();
 // ==================================================
 
 chrome.runtime.onMessage.addListener(
-  (message, sender, sendResponse) => {
+  (
+    message,
+    sender,
+    sendResponse
+  ) => {
 
     // ----------------------------------------------
     // Popup → P1
@@ -125,12 +172,87 @@ chrome.runtime.onMessage.addListener(
     }
 
 
+    // ----------------------------------------------
+    // Popup → P1
+    // ----------------------------------------------
+
     if (
       message?.type ===
       "STOP_CAPTURE"
     ) {
 
       stopCaptureLoop();
+
+      return false;
+    }
+
+
+    // ----------------------------------------------
+    // P4_INPUT
+    //
+    // This keeps the P4 message contract available
+    // for any other extension context.
+    //
+    // P1's own sendToP4() calls handleP4Input()
+    // directly because the service worker should not
+    // send a runtime message to itself.
+    // ----------------------------------------------
+
+    if (
+      message?.type ===
+      "P4_INPUT"
+    ) {
+
+      if (
+        typeof globalThis.handleP4Input !==
+        "function"
+      ) {
+
+        sendResponse({
+
+          valid:
+            false,
+
+          error:
+            "P4 listener is not loaded."
+        });
+
+        return false;
+      }
+
+
+      try {
+
+        const result =
+          globalThis.handleP4Input(
+            message.payload,
+            message.task
+          );
+
+
+        sendResponse(
+          result
+        );
+
+      } catch (error) {
+
+        console.error(
+          "[P4] P4_INPUT processing failed:",
+          error
+        );
+
+
+        sendResponse({
+
+          valid:
+            false,
+
+          error:
+            error?.message ||
+            "P4 processing failed."
+        });
+      }
+
 
       return false;
     }
@@ -181,7 +303,8 @@ chrome.runtime.onMessage.addListener(
     ) {
 
       handleP6Result(
-        message.result || message
+        message.result ||
+        message
       );
 
       return false;
@@ -197,9 +320,13 @@ chrome.runtime.onMessage.addListener(
 // Start capture loop
 // ==================================================
 
-async function startCaptureLoop(task) {
+async function startCaptureLoop(
+  task
+) {
 
-  if (captureRunning) {
+  if (
+    captureRunning
+  ) {
 
     notifyPopup(
       "Capture loop is already running."
@@ -223,7 +350,7 @@ async function startCaptureLoop(task) {
 
 
   // ----------------------------------------------
-  // Get the active tab ONLY when a new task starts.
+  // Get the active tab ONLY when the task starts.
   // ----------------------------------------------
 
   const taskTab =
@@ -244,10 +371,7 @@ async function startCaptureLoop(task) {
 
 
   // ----------------------------------------------
-  // Bind this task to the current tab.
-  //
-  // This binding remains unchanged for every
-  // subsequent cycle.
+  // Bind task to this tab.
   // ----------------------------------------------
 
   currentTask =
@@ -260,9 +384,11 @@ async function startCaptureLoop(task) {
     taskTab.windowId ??
     null;
 
-  captureRunning = true;
+  captureRunning =
+    true;
 
-  currentCycleId = null;
+  currentCycleId =
+    null;
 
 
   resetPrivacyCounters();
@@ -290,14 +416,12 @@ async function startCaptureLoop(task) {
   // Main cycle loop
   // ----------------------------------------------
 
-  while (captureRunning) {
+  while (
+    captureRunning
+  ) {
 
     // --------------------------------------------
-    // Before beginning a NEW cycle, make sure the
-    // original task tab is the visible tab.
-    //
-    // We do this because captureVisibleTab()
-    // captures the visible tab.
+    // Wait until the ORIGINAL task tab is active.
     // --------------------------------------------
 
     const ready =
@@ -314,7 +438,9 @@ async function startCaptureLoop(task) {
     );
 
 
-    if (!captureRunning) {
+    if (
+      !captureRunning
+    ) {
       break;
     }
 
@@ -329,15 +455,20 @@ async function startCaptureLoop(task) {
   // Clean up task state.
   // ----------------------------------------------
 
-  captureRunning = false;
+  captureRunning =
+    false;
 
-  currentTask = null;
+  currentTask =
+    null;
 
-  currentCycleId = null;
+  currentCycleId =
+    null;
 
-  taskTabId = null;
+  taskTabId =
+    null;
 
-  taskWindowId = null;
+  taskWindowId =
+    null;
 }
 
 
@@ -347,17 +478,23 @@ async function startCaptureLoop(task) {
 
 function stopCaptureLoop() {
 
-  if (!captureRunning) {
+  if (
+    !captureRunning
+  ) {
+
     return;
   }
 
 
-  captureRunning = false;
+  captureRunning =
+    false;
 
 
-  taskTabId = null;
+  taskTabId =
+    null;
 
-  taskWindowId = null;
+  taskWindowId =
+    null;
 
 
   notifyPopup(
@@ -370,14 +507,18 @@ function stopCaptureLoop() {
 // Sleep
 // ==================================================
 
-function sleep(ms) {
+function sleep(
+  ms
+) {
 
   return new Promise(
     resolve => {
+
       setTimeout(
         resolve,
         ms
       );
+
     }
   );
 }
@@ -386,18 +527,23 @@ function sleep(ms) {
 // ==================================================
 // Active tab
 //
-// Used ONLY when a NEW task is started.
+// Used ONLY when a NEW task starts.
 //
-// Do NOT use this to determine the tab for
-// subsequent cycles.
+// Never use this to determine the task tab
+// for subsequent cycles.
 // ==================================================
 
 async function getActiveTab() {
 
-  const [tab] =
+  const [
+    tab
+  ] =
     await chrome.tabs.query({
-      active: true,
-      currentWindow: true
+      active:
+        true,
+
+      currentWindow:
+        true
     });
 
 
@@ -407,8 +553,6 @@ async function getActiveTab() {
 
 // ==================================================
 // Task tab
-//
-// Returns the tab associated with the current task.
 // ==================================================
 
 async function getTaskTab() {
@@ -442,7 +586,7 @@ async function getTaskTab() {
 
 
 // ==================================================
-// Check whether the task tab is currently active
+// Check task tab activity
 // ==================================================
 
 async function isTaskTabActive() {
@@ -467,19 +611,14 @@ async function isTaskTabActive() {
 
 
 // ==================================================
-// Wait for the task tab to become active
-//
-// This prevents a NEW cycle from accidentally
-// capturing the user's unrelated tab.
-//
-// The task itself remains active.
-//
-// The user can freely work in other tabs.
+// Wait for task tab to become active
 // ==================================================
 
 async function waitForTaskTabToBeActive() {
 
-  while (captureRunning) {
+  while (
+    captureRunning
+  ) {
 
     const taskTab =
       await getTaskTab();
@@ -509,7 +648,6 @@ async function waitForTaskTabToBeActive() {
 
     // --------------------------------------------
     // Task tab is active.
-    // We can safely capture the visible tab.
     // --------------------------------------------
 
     if (
@@ -521,9 +659,7 @@ async function waitForTaskTabToBeActive() {
 
 
     // --------------------------------------------
-    // User is currently working elsewhere.
-    //
-    // Do NOT capture the new tab.
+    // User is working elsewhere.
     // --------------------------------------------
 
     notifyPopup(
@@ -531,7 +667,9 @@ async function waitForTaskTabToBeActive() {
     );
 
 
-    await sleep(500);
+    await sleep(
+      500
+    );
   }
 
 
@@ -541,15 +679,6 @@ async function waitForTaskTabToBeActive() {
 
 // ==================================================
 // Screenshot
-//
-// IMPORTANT:
-//
-// captureVisibleTab() captures the currently
-// visible tab.
-//
-// Therefore this function is called only after
-// waitForTaskTabToBeActive() confirms that the
-// task tab is active.
 // ==================================================
 
 async function captureScreenshot() {
@@ -557,7 +686,8 @@ async function captureScreenshot() {
   return chrome.tabs.captureVisibleTab(
     null,
     {
-      format: "png"
+      format:
+        "png"
     }
   );
 }
@@ -567,12 +697,15 @@ async function captureScreenshot() {
 // Viewport
 // ==================================================
 
-async function getViewportState(tabId) {
+async function getViewportState(
+  tabId
+) {
 
   return chrome.tabs.sendMessage(
     tabId,
     {
-      type: "GET_VIEWPORT"
+      type:
+        "GET_VIEWPORT"
     }
   );
 }
@@ -582,13 +715,23 @@ async function getViewportState(tabId) {
 // Viewport comparison
 // ==================================================
 
-function sameViewport(a, b) {
+function sameViewport(
+  a,
+  b
+) {
 
   return (
-    a?.scrollX === b?.scrollX &&
-    a?.scrollY === b?.scrollY &&
-    a?.innerWidth === b?.innerWidth &&
-    a?.innerHeight === b?.innerHeight
+    a?.scrollX ===
+      b?.scrollX &&
+
+    a?.scrollY ===
+      b?.scrollY &&
+
+    a?.innerWidth ===
+      b?.innerWidth &&
+
+    a?.innerHeight ===
+      b?.innerHeight
   );
 }
 
@@ -650,7 +793,10 @@ async function sendToDownstream(
   if (!tabId) {
 
     return {
-      valid: false,
+
+      valid:
+        false,
+
       error:
         "No tab ID available."
     };
@@ -678,7 +824,10 @@ async function sendToDownstream(
 
 
     return response || {
-      valid: false,
+
+      valid:
+        false,
+
       error:
         "Empty downstream response."
     };
@@ -692,7 +841,10 @@ async function sendToDownstream(
 
 
     return {
-      valid: false,
+
+      valid:
+        false,
+
       error:
         error?.message ||
         "P2/P3 communication failed."
@@ -704,21 +856,29 @@ async function sendToDownstream(
 // ==================================================
 // P3 → P4
 //
-// IMPORTANT:
-// P3's toP4 contains:
-//   frame_id
-//   elements
-//   screenshot
+// P4 is loaded directly into the P1 service worker.
 //
-// Task is owned by P1 and therefore explicitly
-// forwarded separately.
-//
-// P4 expects:
+// P3 toP4:
 //
 // {
-//   type: "P4_INPUT",
-//   payload,
-//   task
+//   frame_id,
+//   elements,
+//   screenshot
+// }
+//
+// P1 additionally supplies:
+//
+// task
+//
+// P4:
+//
+// handleP4Input(payload, task)
+//
+// returns:
+//
+// {
+//   valid,
+//   result
 // }
 // ==================================================
 
@@ -735,7 +895,10 @@ async function sendToP4(
   ) {
 
     return {
-      valid: false,
+
+      valid:
+        false,
+
       error:
         "Invalid P4 payload."
     };
@@ -748,36 +911,52 @@ async function sendToP4(
   ) {
 
     return {
-      valid: false,
+
+      valid:
+        false,
+
       error:
         "Missing task for P4."
     };
   }
 
 
-  const p4Message = {
+  if (
+    typeof globalThis.handleP4Input !==
+    "function"
+  ) {
 
-    type:
-      "P4_INPUT",
+    return {
 
-    payload,
+      valid:
+        false,
 
-    task:
-      task.trim()
-  };
+      error:
+        "P4 listener is not loaded."
+    };
+  }
 
 
   console.log(
     "[P1 → P4] Request:",
-    p4Message
+    {
+      type:
+        "P4_INPUT",
+
+      payload,
+
+      task:
+        task.trim()
+    }
   );
 
 
   try {
 
     const response =
-      await chrome.runtime.sendMessage(
-        p4Message
+      globalThis.handleP4Input(
+        payload,
+        task.trim()
       );
 
 
@@ -788,7 +967,10 @@ async function sendToP4(
 
 
     return response || {
-      valid: false,
+
+      valid:
+        false,
+
       error:
         "P4 returned no response."
     };
@@ -796,16 +978,19 @@ async function sendToP4(
   } catch (error) {
 
     console.error(
-      "[P1] P4 communication failed:",
+      "[P1] P4 processing failed:",
       error
     );
 
 
     return {
-      valid: false,
+
+      valid:
+        false,
+
       error:
         error?.message ||
-        "P4 communication failed."
+        "P4 processing failed."
     };
   }
 }
@@ -843,6 +1028,7 @@ async function callP5({
         ? toP4.elements
         : [],
 
+    // This is P4's sanitized screenshot.
     screenshot:
       toP4.screenshot ??
       null
@@ -868,6 +1054,7 @@ async function callP5({
             "POST",
 
           headers: {
+
             "Content-Type":
               "application/json"
           },
@@ -894,7 +1081,8 @@ async function callP5({
     response.status;
 
 
-  let data = null;
+  let data =
+    null;
 
 
   try {
@@ -904,7 +1092,8 @@ async function callP5({
 
   } catch {
 
-    data = null;
+    data =
+      null;
   }
 
 
@@ -919,7 +1108,10 @@ async function callP5({
   );
 
 
-  if (status === 422) {
+  if (
+    status ===
+    422
+  ) {
 
     throw new Error(
       "P5 rejected the request (422 malformed payload)."
@@ -927,7 +1119,10 @@ async function callP5({
   }
 
 
-  if (status === 502) {
+  if (
+    status ===
+    502
+  ) {
 
     throw new Error(
       "P5 model response failed validation (502)."
@@ -935,7 +1130,10 @@ async function callP5({
   }
 
 
-  if (status === 504) {
+  if (
+    status ===
+    504
+  ) {
 
     throw new Error(
       "P5 model call timed out (504)."
@@ -943,7 +1141,9 @@ async function callP5({
   }
 
 
-  if (!response.ok) {
+  if (
+    !response.ok
+  ) {
 
     throw new Error(
       `P5 request failed with HTTP ${status}.`
@@ -964,7 +1164,9 @@ async function callP5({
 // Validate P5 response
 // ==================================================
 
-function validateP5Response(data) {
+function validateP5Response(
+  data
+) {
 
   const allowedActions =
     new Set([
@@ -979,7 +1181,8 @@ function validateP5Response(data) {
 
   if (
     !data ||
-    typeof data !== "object"
+    typeof data !==
+      "object"
   ) {
 
     throw new Error(
@@ -1003,7 +1206,9 @@ function validateP5Response(data) {
   if (
     typeof data.confidence !==
       "number" ||
+
     data.confidence < 0 ||
+
     data.confidence > 1
   ) {
 
@@ -1016,7 +1221,8 @@ function validateP5Response(data) {
   if (
     data.target_id !== null &&
     data.target_id !== undefined &&
-    typeof data.target_id !== "string"
+    typeof data.target_id !==
+      "string"
   ) {
 
     throw new Error(
@@ -1029,7 +1235,8 @@ function validateP5Response(data) {
     data.metadata !== undefined &&
     (
       data.metadata === null ||
-      typeof data.metadata !== "object"
+      typeof data.metadata !==
+        "object"
     )
   ) {
 
@@ -1149,17 +1356,11 @@ async function handleP5Action(
 // ==================================================
 // P1 → P6 action request
 //
-// IMPORTANT:
-// This retains the existing P1 message string:
+// P6 runs inside content.js because it needs the
+// live page DOM.
 //
-//   P6_ACTION_REQUEST
-//
-// Your supplied P6 messageTypes.js only confirms
-// P6_CONFIRMATION_REQUEST and
-// P6_CONFIRMATION_RESPONSE.
-//
-// Therefore this action-request string should be
-// matched against the actual P6 action listener.
+// Therefore this MUST use tabs.sendMessage()
+// rather than runtime.sendMessage().
 // ==================================================
 
 async function sendActionToP6(
@@ -1198,10 +1399,33 @@ async function sendActionToP6(
   );
 
 
+  if (
+    !tabId
+  ) {
+
+    return {
+
+      status:
+        "FAILED",
+
+      action:
+        action.action,
+
+      target_id:
+        action.target_id ??
+        null,
+
+      reason:
+        "No task tab available."
+    };
+  }
+
+
   try {
 
     const result =
-      await chrome.runtime.sendMessage(
+      await chrome.tabs.sendMessage(
+        tabId,
         p6Request
       );
 
@@ -1347,7 +1571,9 @@ function handleConfirmationRequest(
     message.requestId;
 
 
-  if (!requestId) {
+  if (
+    !requestId
+  ) {
 
     console.error(
       "[P1] P6 confirmation missing requestId."
@@ -1357,16 +1583,21 @@ function handleConfirmationRequest(
   }
 
 
+  const senderTabId =
+    sender?.tab?.id ??
+    null;
+
+
   pendingConfirmations.set(
     requestId,
     {
+
       senderId:
         sender?.id ??
         null,
 
       tabId:
-        sender?.tab?.id ??
-        null
+        senderTabId
     }
   );
 
@@ -1387,6 +1618,13 @@ function handleConfirmationRequest(
   );
 
 
+  // ----------------------------------------------
+  // Background → Popup
+  //
+  // Popup is an extension context, so runtime
+  // messaging is correct here.
+  // ----------------------------------------------
+
   chrome.runtime
     .sendMessage({
 
@@ -1399,6 +1637,7 @@ function handleConfirmationRequest(
         message.action,
 
       targetSummary
+
     })
     .catch(() => {});
 }
@@ -1418,7 +1657,9 @@ async function handleConfirmationResponse(
   } = message;
 
 
-  if (!requestId) {
+  if (
+    !requestId
+  ) {
 
     console.error(
       "[P1] Missing confirmation requestId."
@@ -1447,7 +1688,9 @@ async function handleConfirmationResponse(
     );
 
 
-  if (!pending) {
+  if (
+    !pending
+  ) {
 
     console.warn(
       "[P1] Confirmation request is no longer pending:",
@@ -1465,15 +1708,35 @@ async function handleConfirmationResponse(
 
   try {
 
-    await chrome.runtime.sendMessage({
+    if (
+      !pending.tabId
+    ) {
 
-      type:
-        "P6_CONFIRMATION_RESPONSE",
+      throw new Error(
+        "Original P6 tab is no longer available."
+      );
+    }
 
-      requestId,
 
-      approved
-    });
+    // --------------------------------------------
+    // P1 → P6
+    //
+    // P6 confirmation listener lives in
+    // content.js.
+    // --------------------------------------------
+
+    await chrome.tabs.sendMessage(
+      pending.tabId,
+      {
+
+        type:
+          "P6_CONFIRMATION_RESPONSE",
+
+        requestId,
+
+        approved
+      }
+    );
 
 
     notifyPopup(
@@ -1507,8 +1770,10 @@ function notifyPopup(
 
   chrome.storage.local
     .set({
+
       obscuraStatus:
         status
+
     })
     .catch(() => {});
 
@@ -1520,6 +1785,7 @@ function notifyPopup(
         "STATUS_UPDATE",
 
       status
+
     })
     .catch(() => {});
 }
@@ -1545,6 +1811,7 @@ function resetPrivacyCounters() {
         sent_to_ai_count:
           0
       }
+
     })
     .catch(() => {});
 }
@@ -1555,7 +1822,10 @@ function sendPrivacyCounters(
   toP1
 ) {
 
-  if (!toP1) {
+  if (
+    !toP1
+  ) {
+
     return;
   }
 
@@ -1578,8 +1848,10 @@ function sendPrivacyCounters(
 
   chrome.storage.local
     .set({
+
       obscuraCounters:
         counters
+
     })
     .catch(() => {});
 
@@ -1622,18 +1894,13 @@ async function handleRedactedScreenshot(
   redactedScreenshot
 ) {
 
-  if (!redactedScreenshot) {
+  if (
+    !redactedScreenshot
+  ) {
+
     return;
   }
 
-
-  // ----------------------------------------------
-  // The original screenshot may be sent to the
-  // local popup for the current preview.
-  //
-  // It is NOT persisted to Downloads.
-  // It is NOT placed in chrome.storage.
-  // ----------------------------------------------
 
   chrome.runtime
     .sendMessage({
@@ -1649,21 +1916,22 @@ async function handleRedactedScreenshot(
 
       redacted_screenshot:
         redactedScreenshot
+
     })
     .catch(() => {});
 
-
-  // ----------------------------------------------
-  // Persist ONLY the redacted screenshot.
-  // ----------------------------------------------
 
   await saveRedactedScreenshot({
 
     cycle_id:
       cycleId,
 
+    original_screenshot:
+      originalScreenshot,
+
     redacted_screenshot:
       redactedScreenshot
+
   });
 }
 
@@ -1680,7 +1948,8 @@ function normalizeImageData(
 
   if (
     !value ||
-    typeof value !== "string"
+    typeof value !==
+      "string"
   ) {
 
     return null;
@@ -1702,32 +1971,33 @@ function normalizeImageData(
 
 
 // ==================================================
-// Save REDACTED screenshot only
-//
-// PRIVACY:
-//
-// Original screenshot:
-//   - stays in memory during the current cycle
-//   - is NOT saved to disk
-//   - is NOT persisted in chrome.storage
-//
-// Redacted screenshot:
-//   - is sanitized by P3
-//   - may be saved locally for transparency/demo
+// Save screenshots
 //
 // Files:
 //
 // Downloads/
 //   obscura-redacted/
+//     <cycle>-ORIGINAL.png
 //     <cycle>-REDACTED.png
+//
+// Original remains local only.
+// It is never sent to P5.
 // ==================================================
 
 async function saveRedactedScreenshot({
   cycle_id,
+  original_screenshot,
   redacted_screenshot
 }) {
 
   try {
+
+    const originalDataUrl =
+      normalizeImageData(
+        original_screenshot,
+        "image/png"
+      );
+
 
     const redactedDataUrl =
       normalizeImageData(
@@ -1736,25 +2006,10 @@ async function saveRedactedScreenshot({
       );
 
 
-    if (!redactedDataUrl) {
-
-      console.warn(
-        "[Obscura] No redacted screenshot available to save."
-      );
-
-      return;
-    }
-
-
     const entry = {
 
       cycleId:
         cycle_id,
-
-      // ------------------------------------------
-      // Original screenshot is deliberately NOT
-      // persisted.
-      // ------------------------------------------
 
       originalId:
         null,
@@ -1767,36 +2022,58 @@ async function saveRedactedScreenshot({
     };
 
 
-    // --------------------------------------------
-    // Save ONLY the redacted screenshot.
-    // --------------------------------------------
+    if (
+      originalDataUrl
+    ) {
 
-    entry.redactedId =
-      await chrome.downloads.download({
+      entry.originalId =
+        await chrome.downloads.download({
 
-        url:
-          redactedDataUrl,
+          url:
+            originalDataUrl,
 
-        filename:
-          `obscura-redacted/${cycle_id}-REDACTED.png`,
+          filename:
+            `obscura-redacted/${cycle_id}-ORIGINAL.png`,
 
-        saveAs:
-          false,
+          saveAs:
+            false,
 
-        conflictAction:
-          "overwrite"
-      });
+          conflictAction:
+            "overwrite"
+
+        });
+    }
 
 
-    // --------------------------------------------
-    // Store ONLY metadata about the redacted
-    // screenshot.
-    // --------------------------------------------
+    if (
+      redactedDataUrl
+    ) {
+
+      entry.redactedId =
+        await chrome.downloads.download({
+
+          url:
+            redactedDataUrl,
+
+          filename:
+            `obscura-redacted/${cycle_id}-REDACTED.png`,
+
+          saveAs:
+            false,
+
+          conflictAction:
+            "overwrite"
+
+        });
+    }
+
 
     const stored =
       await chrome.storage.local.get({
+
         obscuraSavedPairs:
           []
+
       });
 
 
@@ -1814,7 +2091,7 @@ async function saveRedactedScreenshot({
 
 
     // --------------------------------------------
-    // Keep latest 15 redacted screenshots.
+    // Keep latest 15 pairs.
     // --------------------------------------------
 
     while (
@@ -1826,31 +2103,38 @@ async function saveRedactedScreenshot({
         pairs.shift();
 
 
-      const id =
-        oldest?.redactedId;
+      for (
+        const id of [
+          oldest?.originalId,
+          oldest?.redactedId
+        ]
+      ) {
+
+        if (
+          id == null
+        ) {
+
+          continue;
+        }
 
 
-      if (id == null) {
-        continue;
+        try {
+
+          await chrome.downloads.removeFile(
+            id
+          );
+
+        } catch {}
+
+
+        try {
+
+          await chrome.downloads.erase({
+            id
+          });
+
+        } catch {}
       }
-
-
-      try {
-
-        await chrome.downloads.removeFile(
-          id
-        );
-
-      } catch {}
-
-
-      try {
-
-        await chrome.downloads.erase({
-          id
-        });
-
-      } catch {}
     }
 
 
@@ -1861,11 +2145,10 @@ async function saveRedactedScreenshot({
 
     });
 
-
   } catch (error) {
 
     console.error(
-      "[Obscura] Failed to save redacted screenshot:",
+      "[Obscura] Failed to save screenshots:",
       error
     );
   }
@@ -1883,10 +2166,7 @@ async function runCaptureCycle(
 ) {
 
   // ----------------------------------------------
-  // IMPORTANT:
   // Always retrieve the task-bound tab.
-  //
-  // Never use getActiveTab() here.
   // ----------------------------------------------
 
   const tab =
@@ -1913,14 +2193,7 @@ async function runCaptureCycle(
 
   // ----------------------------------------------
   // Safety check:
-  //
-  // captureVisibleTab() must capture the same
-  // tab whose DOM is sent to P2/P3.
-  //
-  // The main loop already waits for the task tab
-  // to be active, but this check protects against
-  // a tab switch occurring immediately before the
-  // cycle starts.
+  // task tab must be active before capture.
   // ----------------------------------------------
 
   if (
@@ -1936,7 +2209,7 @@ async function runCaptureCycle(
 
 
   // ----------------------------------------------
-  // P1 creates ONE authoritative ID.
+  // P1 creates ONE authoritative cycle ID.
   //
   // Retries reuse this ID.
   // ----------------------------------------------
@@ -1974,8 +2247,6 @@ async function runCaptureCycle(
 
       // ------------------------------------------
       // 2. Capture screenshot
-      //
-      // The task tab is active here.
       // ------------------------------------------
 
       const screenshot =
@@ -2103,11 +2374,13 @@ async function runCaptureCycle(
         console.error(
           "[P1] Cycle ID mismatch:",
           {
+
             expected:
               cycleId,
 
             received:
               p23Result.cycle_id
+
           }
         );
 
@@ -2148,30 +2421,46 @@ async function runCaptureCycle(
 
       // ------------------------------------------
       // 11. P3 → P6 sensitive map
+      //
+      // P6 registry lives in content.js.
+      // Therefore use tabs.sendMessage().
       // ------------------------------------------
 
       if (
         p23Result.toP6
       ) {
 
-        chrome.runtime
-          .sendMessage({
+        try {
 
-            type:
-              "P6_SENSITIVE_MAP",
+          await chrome.tabs.sendMessage(
+            tab.id,
+            {
 
-            payload:
-              p23Result.toP6
-          })
-          .catch(() => {});
+              type:
+                "P6_SENSITIVE_MAP",
+
+              payload:
+                p23Result.toP6
+
+            }
+          );
+
+        } catch (error) {
+
+          console.error(
+            "[P1] Failed to send P6 sensitive map:",
+            error
+          );
+
+          notifyPopup(
+            "P6 sensitive map could not be delivered."
+          );
+        }
       }
 
 
       // ------------------------------------------
-      // 12. Preview + save REDACTED screenshot
-      //
-      // Original screenshot is used only for the
-      // current local preview and is NOT persisted.
+      // 12. Preview + save screenshots
       // ------------------------------------------
 
       if (
@@ -2185,14 +2474,13 @@ async function runCaptureCycle(
           screenshot,
 
           p23Result.toP4.screenshot
+
         );
       }
 
 
       // ------------------------------------------
       // 13. P3 → P4
-      //
-      // Task is explicitly forwarded.
       // ------------------------------------------
 
       notifyPopup(
@@ -2245,7 +2533,8 @@ async function runCaptureCycle(
       // ------------------------------------------
       // 15. P4 → P5
       //
-      // P5 receives ONLY P4's filtered elements.
+      // Only the P4 filtered elements and sanitized
+      // screenshot are sent to P5.
       // ------------------------------------------
 
       notifyPopup(
@@ -2265,6 +2554,7 @@ async function runCaptureCycle(
 
             toP4:
               p4Response.result
+
           });
 
       } catch (error) {
@@ -2297,6 +2587,7 @@ async function runCaptureCycle(
           cycleId,
 
           tab.id
+
         );
 
 
@@ -2329,12 +2620,11 @@ async function runCaptureCycle(
       // ------------------------------------------
       // For all other valid actions:
       //
-      // run one cycle and let the outer loop
-      // wait 5 seconds before the next capture.
+      // outer loop waits 5 seconds and then starts
+      // a completely fresh capture.
       //
-      // Before that next capture, the task tab
-      // must be active so captureVisibleTab()
-      // cannot accidentally capture another tab.
+      // waitForTaskTabToBeActive() will make sure
+      // the correct tab is active before capture.
       // ------------------------------------------
 
       return;

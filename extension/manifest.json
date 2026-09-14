@@ -13,7 +13,7 @@
 
   "host_permissions": [
     "http://localhost:8000/*",
-  "<all_urls>"
+    "<all_urls>"
   ],
 
   "background": {
@@ -26,7 +26,9 @@
 
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "<all_urls>"
+      ],
       "js": [
         "p2/dom/stableIds.js",
         "p2/dom/extractElements.js",
@@ -46,7 +48,9 @@
         "models/blazeface/*",
         "models/tessdata/*"
       ],
-      "matches": ["<all_urls>"]
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ]
 }

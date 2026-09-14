@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
+
   <meta charset="UTF-8">
 
   <meta
@@ -10,25 +12,34 @@
 
   <title>Obscura</title>
 
-  <link rel="stylesheet" href="popup.css">
+  <link
+    rel="stylesheet"
+    href="popup.css"
+  >
+
 </head>
+
 
 <body>
 
   <main class="popup">
 
-    <!-- HEADER -->
+
+    <!-- ================= HEADER ================= -->
+
     <header class="header">
 
       <div class="brand">
 
         <img
-          src="assets/obscura-logo.png"
-          alt="Obscura logo"
+          id="obscura-logo"
           class="logo"
+          src="assets/obscura-logo.png"
+          alt="Obscura"
         >
 
         <div class="brand-copy">
+
           <div class="brand-title">
             Obscura
           </div>
@@ -36,9 +47,11 @@
           <div class="brand-subtitle">
             Privacy-preserving browser agent
           </div>
+
         </div>
 
       </div>
+
 
       <span
         id="header-dot"
@@ -48,22 +61,25 @@
     </header>
 
 
-    <!-- TASK -->
+    <!-- ================= TASK ================= -->
+
     <section class="task-section">
 
       <label
-        for="task-input"
         class="task-label"
+        for="task-input"
       >
         Task
       </label>
 
+
       <input
         id="task-input"
         type="text"
-        placeholder="e.g. Find Mumbai flight"
         autocomplete="off"
+        placeholder="e.g. Find Mumbai flight"
       >
+
 
       <div class="action-row">
 
@@ -74,6 +90,7 @@
         >
           Start capture cycle
         </button>
+
 
         <button
           id="stop-btn"
@@ -89,7 +106,8 @@
     </section>
 
 
-    <!-- STATUS -->
+    <!-- ================= STATUS ================= -->
+
     <section
       id="status-bar"
       class="status-bar"
@@ -99,6 +117,7 @@
         id="status-dot"
         class="status-dot"
       ></span>
+
 
       <span
         id="status-text"
@@ -110,8 +129,10 @@
     </section>
 
 
-    <!-- COUNTERS -->
+    <!-- ================= METRICS ================= -->
+
     <section class="metrics">
+
 
       <div class="metric">
 
@@ -163,12 +184,15 @@
     </section>
 
 
-    <!-- CAPTURE PREVIEW -->
+    <!-- ================= PREVIEW ================= -->
+
     <section class="preview-section">
+
 
       <div class="preview-heading">
 
         <div>
+
           <h2>
             Capture preview
           </h2>
@@ -176,11 +200,20 @@
           <p>
             Latest frame before and after redaction
           </p>
+
         </div>
 
+
         <div class="protected-badge">
-          <span class="shield">♢</span>
-          Protected
+
+          <span class="shield">
+            ♢
+          </span>
+
+          <span>
+            Protected
+          </span>
+
         </div>
 
       </div>
@@ -188,14 +221,26 @@
 
       <div class="preview-labels">
 
-        <div class="preview-label">
-          <span class="label-dot original-dot"></span>
-          Original
-        </div>
 
         <div class="preview-label">
-          <span class="label-dot redacted-dot"></span>
+
+          <span
+            class="label-dot original-dot"
+          ></span>
+
+          Original
+
+        </div>
+
+
+        <div class="preview-label">
+
+          <span
+            class="label-dot redacted-dot"
+          ></span>
+
           Redacted
+
         </div>
 
       </div>
@@ -203,13 +248,15 @@
 
       <div class="preview-grid">
 
-        <div class="preview-card original-card">
+
+        <div class="preview-card">
 
           <img
             id="original-preview"
             class="preview-image"
             alt="Original screenshot"
           >
+
 
           <span
             id="original-placeholder"
@@ -221,13 +268,16 @@
         </div>
 
 
-        <div class="preview-card redacted-card">
+        <div
+          class="preview-card redacted-card"
+        >
 
           <img
             id="redacted-preview"
             class="preview-image"
             alt="Redacted screenshot"
           >
+
 
           <span
             id="redacted-placeholder"
@@ -243,7 +293,8 @@
     </section>
 
 
-    <!-- FOOTER -->
+    <!-- ================= FOOTER ================= -->
+
     <footer class="footer">
 
       <span>
@@ -256,10 +307,12 @@
 
     </footer>
 
+
   </main>
 
 
   <script src="popup.js"></script>
 
 </body>
+
 </html>

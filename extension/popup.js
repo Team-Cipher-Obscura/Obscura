@@ -36,10 +36,14 @@ const redactedPreview =
   document.getElementById("redacted-preview");
 
 const originalPlaceholder =
-  document.getElementById("original-placeholder");
+  document.getElementById(
+    "original-placeholder"
+  );
 
 const redactedPlaceholder =
-  document.getElementById("redacted-placeholder");
+  document.getElementById(
+    "redacted-placeholder"
+  );
 
 
 /* =========================================================
@@ -65,10 +69,12 @@ function setupListeners() {
     startCapture
   );
 
+
   stopBtn.addEventListener(
     "click",
     stopCapture
   );
+
 
   taskInput.addEventListener(
     "keydown",
@@ -78,7 +84,9 @@ function setupListeners() {
         return;
       }
 
+
       event.preventDefault();
+
 
       if (!startBtn.disabled) {
         startCapture();
@@ -94,6 +102,7 @@ function setupListeners() {
       if (!message) {
         return;
       }
+
 
       handleMessage(message);
 
@@ -123,10 +132,12 @@ async function startCapture() {
     taskInput.focus();
 
     return;
+
   }
 
 
   setRunning(true);
+
 
   setStatus(
     "Starting capture cycle…",
@@ -150,13 +161,16 @@ async function startCapture() {
 
       setRunning(false);
 
+
       setStatus(
         response.error ||
         "Unable to start capture.",
         "error"
       );
 
+
       return;
+
     }
 
 
@@ -164,9 +178,11 @@ async function startCapture() {
 
       obscura_task: task,
 
-      obscura_capture_running: true
+      obscura_capture_running:
+        true
 
     });
+
 
   } catch (error) {
 
@@ -175,7 +191,9 @@ async function startCapture() {
       error
     );
 
+
     setRunning(false);
+
 
     setStatus(
       "Could not start capture.",
@@ -211,12 +229,14 @@ async function stopCapture() {
 
   await chrome.storage.local.set({
 
-    obscura_capture_running: false
+    obscura_capture_running:
+      false
 
   });
 
 
   setRunning(false);
+
 
   setStatus(
     "Capture stopped.",
@@ -240,6 +260,7 @@ function handleMessage(message) {
 
       updateCounters(message);
 
+
       if (
         message.status ||
         message.message
@@ -261,6 +282,7 @@ function handleMessage(message) {
 
       setRunning(true);
 
+
       setStatus(
         message.status ||
         message.message ||
@@ -274,6 +296,7 @@ function handleMessage(message) {
     case "CAPTURE_STOPPED":
 
       setRunning(false);
+
 
       setStatus(
         message.status ||
@@ -315,9 +338,12 @@ function handleMessage(message) {
       if (
         message.status ||
         message.message ||
-        message.pii_detected_count !== undefined ||
-        message.redacted_count !== undefined ||
-        message.sent_to_ai_count !== undefined
+        message.pii_detected_count !==
+          undefined ||
+        message.redacted_count !==
+          undefined ||
+        message.sent_to_ai_count !==
+          undefined
       ) {
 
         handleStatus(message);
@@ -361,7 +387,9 @@ function handleStatus(message) {
   ) {
 
     setRunning(
-      Boolean(message.captureRunning)
+      Boolean(
+        message.captureRunning
+      )
     );
 
   }
@@ -373,7 +401,9 @@ function handleStatus(message) {
   ) {
 
     setRunning(
-      Boolean(message.capture_running)
+      Boolean(
+        message.capture_running
+      )
     );
 
   }
@@ -447,7 +477,11 @@ function showImage(
 
   image.src = source;
 
-  image.classList.add("visible");
+
+  image.classList.add(
+    "visible"
+  );
+
 
   placeholder.style.display =
     "none";
@@ -533,26 +567,38 @@ function updateCounters(message) {
     counters.sent_to_ai;
 
 
-  if (typeof pii === "number") {
+  if (
+    typeof pii === "number"
+  ) {
 
     piiCount.textContent =
-      String(Math.max(0, pii));
+      String(
+        Math.max(0, pii)
+      );
 
   }
 
 
-  if (typeof redacted === "number") {
+  if (
+    typeof redacted === "number"
+  ) {
 
     redactedCount.textContent =
-      String(Math.max(0, redacted));
+      String(
+        Math.max(0, redacted)
+      );
 
   }
 
 
-  if (typeof sent === "number") {
+  if (
+    typeof sent === "number"
+  ) {
 
     sentCount.textContent =
-      String(Math.max(0, sent));
+      String(
+        Math.max(0, sent)
+      );
 
   }
 
@@ -578,7 +624,9 @@ function handleActionResult(message) {
   }
 
 
-  if (result.status === "EXECUTED") {
+  if (
+    result.status === "EXECUTED"
+  ) {
 
     setStatus(
       "Action executed. Continuing…",
@@ -633,8 +681,10 @@ function setRunning(running) {
   startBtn.disabled =
     running;
 
+
   stopBtn.disabled =
     !running;
+
 
   taskInput.disabled =
     running;
@@ -708,7 +758,9 @@ function setStatus(
       "running"
     );
 
-  } else if (type === "error") {
+  } else if (
+    type === "error"
+  ) {
 
     headerDot.classList.add(
       "error"
@@ -746,6 +798,7 @@ function normalizeStatus(type) {
     return type;
 
   }
+
 
   return "idle";
 
@@ -830,6 +883,7 @@ async function restoreState() {
       )
     );
 
+
   } catch (error) {
 
     console.error(
@@ -851,13 +905,19 @@ function saveCounters() {
   chrome.storage.local.set({
 
     obscura_pii_detected:
-      Number(piiCount.textContent) || 0,
+      Number(
+        piiCount.textContent
+      ) || 0,
 
     obscura_redacted:
-      Number(redactedCount.textContent) || 0,
+      Number(
+        redactedCount.textContent
+      ) || 0,
 
     obscura_sent_to_ai:
-      Number(sentCount.textContent) || 0
+      Number(
+        sentCount.textContent
+      ) || 0
 
   });
 

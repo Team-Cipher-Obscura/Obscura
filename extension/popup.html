@@ -2,80 +2,78 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+
   <title>Obscura</title>
+
   <link rel="stylesheet" href="popup.css" />
 </head>
 
 <body>
 
-  <main class="app">
+  <div class="popup-container">
 
-    <!-- ==========================================
-         HEADER
-         ========================================== -->
-
+    <!-- ================= HEADER ================= -->
     <header class="header">
 
       <div class="brand">
 
-        <img
-          class="brand-logo"
-          src="logo.svg"
-          alt="Obscura"
-        />
+        <div class="logo-wrapper">
+          <img
+            src="logo.png"
+            alt="Obscura"
+            class="logo"
+          />
+        </div>
 
-        <div class="brand-copy">
-          <div class="brand-name">
-            Obscura
-          </div>
-
-          <div class="brand-subtitle">
-            Privacy-preserving browser agent
-          </div>
+        <div class="brand-text">
+          <h1>Obscura</h1>
+          <p>Privacy-preserving browser agent</p>
         </div>
 
       </div>
 
-      <span
-        id="liveDot"
-        class="live-dot"
-        title="Idle"
-      ></span>
+      <div
+        id="header-status-dot"
+        class="header-status-dot idle"
+      ></div>
 
     </header>
 
 
-    <!-- ==========================================
-         TASK
-         ========================================== -->
-
+    <!-- ================= TASK ================= -->
     <section class="task-section">
 
-      <label for="taskInput">
+      <label
+        for="task-input"
+        class="section-label"
+      >
         Task
       </label>
 
       <input
-        id="taskInput"
+        id="task-input"
         type="text"
         autocomplete="off"
         placeholder="e.g. Find Mumbai flight"
       />
 
-      <div class="button-row">
+      <div class="task-buttons">
 
         <button
-          id="startBtn"
-          class="primary-btn"
+          id="start-btn"
+          class="start-btn"
           type="button"
         >
           Start capture cycle
         </button>
 
         <button
-          id="stopBtn"
-          class="secondary-btn"
+          id="stop-btn"
+          class="stop-btn"
           type="button"
           disabled
         >
@@ -87,216 +85,155 @@
     </section>
 
 
-    <!-- ==========================================
-         STATUS
-         ========================================== -->
-
-    <section class="status-row">
-
-      <span class="status-title">
-        Status
-      </span>
+    <!-- ================= STATUS ================= -->
+    <section
+      id="status-bar"
+      class="status-bar idle"
+    >
 
       <span
-        id="status"
-        class="status-text"
-      >
+        id="status-dot"
+        class="status-dot"
+      ></span>
+
+      <span id="status-text">
         Idle. Enter a task and click start.
       </span>
 
     </section>
 
 
-    <!-- ==========================================
-         PRIVACY METRICS
-         ========================================== -->
-
-    <section
-      class="metrics"
-      aria-label="Privacy counters"
-    >
+    <!-- ================= COUNTERS ================= -->
+    <section class="metrics">
 
       <div class="metric">
 
-        <span>
+        <div
+          id="pii-count"
+          class="metric-value"
+        >
+          0
+        </div>
+
+        <div class="metric-label">
           PII detected
-        </span>
-
-        <strong id="piiCount">
-          0
-        </strong>
-
-      </div>
-
-
-      <div class="metric">
-
-        <span>
-          Redacted
-        </span>
-
-        <strong id="redactedCount">
-          0
-        </strong>
-
-      </div>
-
-
-      <div class="metric">
-
-        <span>
-          Sent to AI
-        </span>
-
-        <strong id="sentCount">
-          0
-        </strong>
-
-      </div>
-
-    </section>
-
-
-    <!-- ==========================================
-         P6 CONFIRMATION
-         ========================================== -->
-
-    <section
-      id="confirmation"
-      class="confirmation"
-      hidden
-    >
-
-      <div class="confirmation-header">
-
-        <span class="confirmation-icon">
-          !
-        </span>
-
-        <div>
-
-          <div class="confirmation-title">
-            Confirmation required
-          </div>
-
-          <div class="confirmation-subtitle">
-            Obscura needs your approval before continuing.
-          </div>
-
         </div>
 
       </div>
 
 
-      <div
-        id="confirmationText"
-        class="confirmation-text"
-      >
-        An action requires your confirmation.
+      <div class="metric">
+
+        <div
+          id="redacted-count"
+          class="metric-value"
+        >
+          0
+        </div>
+
+        <div class="metric-label">
+          Redacted
+        </div>
+
       </div>
 
 
-      <div class="confirmation-actions">
+      <div class="metric">
 
-        <button
-          id="denyBtn"
-          class="secondary-btn"
-          type="button"
+        <div
+          id="sent-count"
+          class="metric-value"
         >
-          Deny
-        </button>
+          0
+        </div>
 
-        <button
-          id="approveBtn"
-          class="primary-btn"
-          type="button"
-        >
-          Approve
-        </button>
+        <div class="metric-label">
+          Sent to AI
+        </div>
 
       </div>
 
     </section>
 
 
-    <!-- ==========================================
-         CAPTURE PREVIEW
-         ========================================== -->
-
+    <!-- ================= PREVIEW ================= -->
     <section class="preview-section">
 
-      <div class="section-heading">
+      <div class="preview-header">
 
         <div>
-
-          <h2>
-            Capture preview
-          </h2>
+          <h2>Capture preview</h2>
 
           <p>
             Latest frame before and after redaction
           </p>
-
         </div>
 
-        <span class="privacy-badge">
+        <div class="protected-badge">
+
+          <span class="shield-icon">
+            ♢
+          </span>
+
           Protected
-        </span>
+
+        </div>
 
       </div>
 
 
+      <!-- Preview labels -->
+      <div class="preview-labels">
+
+        <div class="preview-label original-label">
+          <span class="label-dot"></span>
+          Original
+        </div>
+
+        <div class="preview-label redacted-label">
+          <span class="label-dot"></span>
+          Redacted
+        </div>
+
+      </div>
+
+
+      <!-- Preview images -->
       <div class="preview-grid">
 
         <!-- Original -->
+        <div class="preview-card">
 
-        <div class="preview-panel">
+          <img
+            id="original-preview"
+            class="preview-image hidden"
+            alt="Original screenshot"
+          />
 
-          <div class="preview-label">
-            Original
-          </div>
-
-          <div class="image-wrap">
-
-            <img
-              id="originalPreview"
-              alt="Original screenshot"
-            />
-
-            <div
-              id="originalPlaceholder"
-              class="image-placeholder"
-            >
-              No capture yet
-            </div>
-
+          <div
+            id="original-placeholder"
+            class="preview-placeholder"
+          >
+            <span>Original screenshot</span>
           </div>
 
         </div>
 
 
         <!-- Redacted -->
+        <div class="preview-card redacted-card">
 
-        <div class="preview-panel">
+          <img
+            id="redacted-preview"
+            class="preview-image hidden"
+            alt="Redacted screenshot"
+          />
 
-          <div class="preview-label">
-            Redacted
-          </div>
-
-          <div class="image-wrap">
-
-            <img
-              id="redactedPreview"
-              alt="Redacted screenshot"
-            />
-
-            <div
-              id="redactedPlaceholder"
-              class="image-placeholder"
-            >
-              No redacted frame yet
-            </div>
-
+          <div
+            id="redacted-placeholder"
+            class="preview-placeholder redacted-placeholder"
+          >
+            <span>Redacted screenshot</span>
           </div>
 
         </div>
@@ -306,23 +243,16 @@
     </section>
 
 
-    <!-- ==========================================
-         FOOTER
-         ========================================== -->
-
+    <!-- ================= FOOTER ================= -->
     <footer class="footer">
 
-      <span>
-        Obscura
-      </span>
+      <span>Obscura</span>
 
-      <span>
-        P1 capture pipeline
-      </span>
+      <span>P1 capture pipeline</span>
 
     </footer>
 
-  </main>
+  </div>
 
 
   <script src="popup.js"></script>

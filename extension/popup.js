@@ -1,683 +1,1125 @@
-// popup.js
-// Obscura — P1 Popup UI
-//
-// Responsibilities:
-//   - Collect task
-//   - Start / stop P1 capture loop
-//   - Display P1 status
-//   - Display privacy counters
-//   - Display original + redacted screenshots
-//   - Handle P6 confirmation requests
-//
-// Capture coordination remains in background.js.
+/* =========================================================
+   OBSCURA POPUP
+   P1 UI Controller
+   ========================================================= */
 
+const DEFAULT_STATE = {
+  status: "Idle. Enter a task and click start.",
+  statusType: "idle",
 
-// ==================================================
-// DOM ELEMENTS
-// ==================================================
+  captureRunning: false,
 
-const taskInput =
-  document.getElementById("taskInput");
+  piiDetected: 0,
+  redacted: 0,
+  sentToAI: 0,
 
-const startBtn =
-  document.getElementById("startBtn");
+  originalScreenshot: null,
+  redactedScreenshot: null
+};
 
-const stopBtn =
-  document.getElementById("stopBtn");
 
-const statusEl =
-  document.getElementById("status");
+/* =========================================================
+   DOM REFERENCES
+   ========================================================= */
 
-const piiCountEl =
-  document.getElementById("piiCount");
+const taskInput = document.getElementById("task-input");
 
-const redactedCountEl =
-  document.getElementById("redactedCount");
+const startBtn = document.getElementById("start-btn");
+const stopBtn = document.getElementById("stop-btn");
 
-const sentCountEl =
-  document.getElementById("sentCount");
+const statusBar = document.getElementById("status-bar");
+const statusDot = document.getElementById("status-dot");
+const statusText = document.getElementById("status-text");
 
-const liveDot =
-  document.getElementById("liveDot");
+const headerStatusDot =
+  document.getElementById("header-status-dot");
 
-const originalPreviewEl =
-  document.getElementById("originalPreview");
+const piiCount =
+  document.getElementById("pii-count");
 
-const redactedPreviewEl =
-  document.getElementById("redactedPreview");
+const redactedCount =
+  document.getElementById("redacted-count");
 
-const originalPlaceholderEl =
-  document.getElementById("originalPlaceholder");
+const sentCount =
+  document.getElementById("sent-count");
 
-const redactedPlaceholderEl =
-  document.getElementById("redactedPlaceholder");
+const originalPreview =
+  document.getElementById("original-preview");
 
+const redactedPreview =
+  document.getElementById("redacted-preview");
 
-// P6 confirmation UI
+const originalPlaceholder =
+  document.getElementById("original-placeholder");
 
-const confirmationEl =
-  document.getElementById("confirmation");
+const redactedPlaceholder =
+  document.getElementById("redacted-placeholder");
 
-const confirmationTextEl =
-  document.getElementById("confirmationText");
 
-const approveBtn =
-  document.getElementById("approveBtn");
+/* =========================================================
+   INITIALIZATION
+   ========================================================= */
 
-const denyBtn =
-  document.getElementById("denyBtn");
+document.addEventListener("DOMContentLoaded", async () => {
+  await restoreState();
 
+  setupEventListeners();
+});
 
-// ==================================================
-// LOCAL STATE
-// ==================================================
 
-let captureRunning = false;
+/* =========================================================
+   EVENT LISTENERS
+   ========================================================= */
 
-let pendingConfirmationId = null;
+function setupEventListeners() {
 
+  startBtn.addEventListener("click", startCapture);
 
-// ==================================================
-// INITIAL UI
-// ==================================================
+  stopBtn.addEventListener("click", stopCapture);
 
-setStatus(
-  "Idle. Enter a task and click start."
-);
 
-setLiveState(false);
+  /*
+   * Allow Enter to start the task.
+   */
+  taskInput.addEventListener("keydown", (event) => {
 
-updateButtonState();
+    if (event.key !== "Enter") {
+      return;
+    }
 
-hideConfirmation();
+    event.preventDefault();
 
+    if (!startBtn.disabled) {
+      startCapture();
+    }
+  });
 
-// ==================================================
-// STATUS
-// ==================================================
 
-function setStatus(message) {
-
-  if (!statusEl) {
-    return;
-  }
-
-  statusEl.textContent =
-    message || "";
-}
-
-
-// ==================================================
-// LIVE DOT
-// ==================================================
-
-function setLiveState(
-  active,
-  warning = false
-) {
-
-  if (!liveDot) {
-    return;
-  }
-
-  liveDot.classList.remove(
-    "active",
-    "warning"
-  );
-
-  if (warning) {
-
-    liveDot.classList.add(
-      "warning"
-    );
-
-    liveDot.title =
-      "Attention required";
-
-    return;
-  }
-
-  if (active) {
-
-    liveDot.classList.add(
-      "active"
-    );
-
-    liveDot.title =
-      "Capture active";
-
-    return;
-  }
-
-  liveDot.title =
-    "Idle";
-}
-
-
-// ==================================================
-// BUTTON STATE
-// ==================================================
-
-function updateButtonState() {
-
-  if (startBtn) {
-
-    startBtn.disabled =
-      captureRunning;
-  }
-
-  if (stopBtn) {
-
-    stopBtn.disabled =
-      !captureRunning;
-  }
-}
-
-
-// ==================================================
-// START
-// ==================================================
-
-if (startBtn) {
-
-  startBtn.addEventListener(
-    "click",
-    () => {
-
-      const task =
-        taskInput?.value.trim();
-
-
-      if (!task) {
-
-        setStatus(
-          "Enter a task first."
-        );
-
-        taskInput?.focus();
-
-        return;
+  /*
+   * Receive updates from background.js.
+   */
+  chrome.runtime.onMessage.addListener(
+    (message, sender, sendResponse) => {
+
+      if (!message || !message.type) {
+        return false;
       }
 
+      handleBackgroundMessage(message);
 
-      captureRunning =
-        true;
-
-      updateButtonState();
-
-      setLiveState(true);
-
-
-      setStatus(
-        "Starting capture cycle..."
-      );
-
-
-      chrome.runtime.sendMessage({
-
-        type:
-          "START_CAPTURE",
-
-        task
-
-      }).catch((error) => {
-
-        console.error(
-          "[Obscura Popup] Start failed:",
-          error
-        );
-
-
-        captureRunning =
-          false;
-
-        updateButtonState();
-
-        setLiveState(false);
-
-
-        setStatus(
-          "Unable to start capture cycle."
-        );
-      });
+      return false;
     }
   );
 }
 
 
-// ==================================================
-// STOP
-// ==================================================
+/* =========================================================
+   START
+   ========================================================= */
 
-if (stopBtn) {
+async function startCapture() {
 
-  stopBtn.addEventListener(
-    "click",
-    () => {
+  const task = taskInput.value.trim();
 
-      chrome.runtime.sendMessage({
-
-        type:
-          "STOP_CAPTURE"
-
-      }).catch((error) => {
-
-        console.error(
-          "[Obscura Popup] Stop failed:",
-          error
-        );
-      });
-
-
-      captureRunning =
-        false;
-
-      updateButtonState();
-
-      setLiveState(false);
-
-
-      setStatus(
-        "Stopping capture cycle..."
-      );
-    }
-  );
-}
-
-
-// ==================================================
-// P6 — APPROVE
-// ==================================================
-
-if (approveBtn) {
-
-  approveBtn.addEventListener(
-    "click",
-    () => {
-
-      respondToConfirmation(true);
-    }
-  );
-}
-
-
-// ==================================================
-// P6 — DENY
-// ==================================================
-
-if (denyBtn) {
-
-  denyBtn.addEventListener(
-    "click",
-    () => {
-
-      respondToConfirmation(false);
-    }
-  );
-}
-
-
-// ==================================================
-// P6 CONFIRMATION RESPONSE
-// ==================================================
-
-function respondToConfirmation(
-  approved
-) {
-
-  if (!pendingConfirmationId) {
-    return;
-  }
-
-
-  const requestId =
-    pendingConfirmationId;
-
-
-  pendingConfirmationId =
-    null;
-
-
-  hideConfirmation();
-
-
-  setLiveState(
-    captureRunning
-  );
-
-
-  setStatus(
-    approved
-      ? "Confirmation approved."
-      : "Confirmation denied."
-  );
-
-
-  chrome.runtime.sendMessage({
-
-    type:
-      "P6_CONFIRMATION_RESPONSE",
-
-    requestId,
-
-    approved
-
-  }).catch((error) => {
-
-    console.error(
-      "[Obscura Popup] Confirmation response failed:",
-      error
-    );
-
+  if (!task) {
 
     setStatus(
-      "Failed to send confirmation response."
+      "Please enter a task first.",
+      "error"
     );
-  });
-}
 
+    taskInput.focus();
 
-// ==================================================
-// SHOW CONFIRMATION
-// ==================================================
-
-function showConfirmation(
-  message
-) {
-
-  if (confirmationTextEl) {
-
-    confirmationTextEl.textContent =
-      message ||
-      "An action requires your confirmation.";
-  }
-
-
-  if (confirmationEl) {
-
-    confirmationEl.hidden =
-      false;
-
-    confirmationEl.style.display =
-      "";
-  }
-
-
-  setLiveState(
-    false,
-    true
-  );
-}
-
-
-// ==================================================
-// HIDE CONFIRMATION
-// ==================================================
-
-function hideConfirmation() {
-
-  if (confirmationEl) {
-
-    confirmationEl.hidden =
-      true;
-
-    confirmationEl.style.display =
-      "none";
-  }
-}
-
-
-// ==================================================
-// IMAGE PREVIEW
-// ==================================================
-
-function setPreview(
-  imageElement,
-  placeholderElement,
-  imageData,
-  defaultMime = "image/png"
-) {
-
-  if (
-    !imageElement ||
-    !imageData
-  ) {
     return;
   }
 
 
-  let src;
+  /*
+   * Optimistically update UI.
+   */
+  setRunningState(true);
+
+  setStatus(
+    "Starting capture cycle…",
+    "running"
+  );
 
 
-  // Already a data URL.
-  if (
-    typeof imageData === "string" &&
-    imageData.startsWith("data:")
-  ) {
+  try {
 
-    src =
-      imageData;
-
-  } else {
-
-    // Bare base64.
-    src =
-      `data:${defaultMime};base64,${imageData}`;
-  }
+    const response =
+      await chrome.runtime.sendMessage({
+        type: "START_CAPTURE",
+        task
+      });
 
 
-  imageElement.onload = () => {
+    /*
+     * Some background implementations may not return
+     * a response. Therefore only treat an explicit
+     * failure as an error.
+     */
+    if (response && response.valid === false) {
 
-    if (placeholderElement) {
+      setRunningState(false);
 
-      placeholderElement.style.display =
-        "none";
-    }
-  };
+      setStatus(
+        response.error || "Unable to start capture.",
+        "error"
+      );
 
-
-  imageElement.onerror = () => {
-
-    if (placeholderElement) {
-
-      placeholderElement.style.display =
-        "flex";
-    }
-  };
-
-
-  imageElement.src =
-    src;
-}
-
-
-// ==================================================
-// RECEIVE BACKGROUND MESSAGES
-// ==================================================
-
-chrome.runtime.onMessage.addListener(
-  (message) => {
-
-    if (!message) {
       return;
     }
 
 
-    // ==============================================
-    // STATUS UPDATE
-    // ==============================================
+    /*
+     * Save task locally so popup reopening does not
+     * immediately lose the entered task.
+     */
+    await chrome.storage.local.set({
+      obscura_task: task
+    });
 
-    if (
-      message.type ===
-      "STATUS_UPDATE"
-    ) {
+  } catch (error) {
 
-      const status =
-        message.status || "";
+    console.error(
+      "Failed to start Obscura:",
+      error
+    );
 
+    setRunningState(false);
+
+    setStatus(
+      "Could not start capture.",
+      "error"
+    );
+  }
+}
+
+
+/* =========================================================
+   STOP
+   ========================================================= */
+
+async function stopCapture() {
+
+  setStatus(
+    "Stopping capture…",
+    "running"
+  );
+
+
+  try {
+
+    const response =
+      await chrome.runtime.sendMessage({
+        type: "STOP_CAPTURE"
+      });
+
+
+    if (response && response.valid === false) {
 
       setStatus(
-        status
+        response.error || "Unable to stop capture.",
+        "error"
       );
 
-
-      const normalized =
-        status.toLowerCase();
-
-
-      // Active pipeline states.
-      if (
-        normalized.includes("started") ||
-        normalized.includes("capturing") ||
-        normalized.includes("sending") ||
-        normalized.includes("action:")
-      ) {
-
-        captureRunning =
-          true;
-
-        setLiveState(true);
-      }
+      return;
+    }
 
 
-      // Stopped / cancelled states.
-      if (
-        normalized.includes("stopped") ||
-        normalized.includes("cancelled") ||
-        normalized.includes("canceled")
-      ) {
+    setRunningState(false);
 
-        captureRunning =
-          false;
+    setStatus(
+      "Capture stopped.",
+      "idle"
+    );
 
-        setLiveState(false);
-      }
+  } catch (error) {
+
+    console.error(
+      "Failed to stop Obscura:",
+      error
+    );
+
+    setRunningState(false);
+
+    setStatus(
+      "Capture stopped.",
+      "idle"
+    );
+  }
+}
 
 
-      // Attention states.
-      if (
-        normalized.includes("failed") ||
-        normalized.includes("blocked") ||
-        normalized.includes("confirmation")
-      ) {
+/* =========================================================
+   BACKGROUND MESSAGE HANDLER
+   ========================================================= */
 
-        setLiveState(
-          false,
-          true
+function handleBackgroundMessage(message) {
+
+  switch (message.type) {
+
+
+    /* ---------------------------------------------
+       REDACTED PREVIEW
+       --------------------------------------------- */
+
+    case "REDACTED_PREVIEW":
+
+      handleRedactedPreview(message);
+
+      break;
+
+
+    /* ---------------------------------------------
+       CAPTURE STARTED
+       --------------------------------------------- */
+
+    case "CAPTURE_STARTED":
+
+      setRunningState(true);
+
+      setStatus(
+        message.status || "Capture cycle running…",
+        "running"
+      );
+
+      break;
+
+
+    /* ---------------------------------------------
+       CAPTURE STOPPED
+       --------------------------------------------- */
+
+    case "CAPTURE_STOPPED":
+
+      setRunningState(false);
+
+      setStatus(
+        message.status || "Capture stopped.",
+        "idle"
+      );
+
+      break;
+
+
+    /* ---------------------------------------------
+       STATUS UPDATE
+       --------------------------------------------- */
+
+    case "STATUS_UPDATE":
+
+      if (typeof message.status === "string") {
+
+        setStatus(
+          message.status,
+          normalizeStatusType(message.statusType)
         );
       }
 
+      if (
+        message.captureRunning !== undefined
+      ) {
 
-      updateButtonState();
-    }
-
-
-    // ==============================================
-    // PRIVACY COUNTERS
-    // ==============================================
-
-    if (
-      message.type ===
-      "PRIVACY_COUNTERS"
-    ) {
-
-      if (piiCountEl) {
-
-        piiCountEl.textContent =
-          String(
-            message.pii_detected_count ?? 0
-          );
-      }
-
-
-      if (redactedCountEl) {
-
-        redactedCountEl.textContent =
-          String(
-            message.redacted_count ?? 0
-          );
-      }
-
-
-      if (sentCountEl) {
-
-        sentCountEl.textContent =
-          String(
-            message.sent_to_ai_count ?? 0
-          );
-      }
-    }
-
-
-    // ==============================================
-    // REDACTED PREVIEW
-    // ==============================================
-
-    if (
-      message.type ===
-      "REDACTED_PREVIEW"
-    ) {
-
-      setPreview(
-
-        originalPreviewEl,
-
-        originalPlaceholderEl,
-
-        message.original_screenshot,
-
-        "image/png"
-      );
-
-
-      setPreview(
-
-        redactedPreviewEl,
-
-        redactedPlaceholderEl,
-
-        message.redacted_screenshot,
-
-        "image/png"
-      );
-    }
-
-
-    // ==============================================
-    // P6 CONFIRMATION REQUEST
-    // ==============================================
-
-    if (
-      message.type ===
-      "P6_CONFIRMATION_REQUEST"
-    ) {
-
-      if (!message.requestId) {
-
-        console.warn(
-          "[Obscura Popup] Confirmation request missing requestId."
+        setRunningState(
+          Boolean(message.captureRunning)
         );
-
-        return;
       }
 
+      updateCountersFromMessage(message);
 
-      pendingConfirmationId =
-        message.requestId;
-
-
-      const targetSummary =
-        message.targetSummary ||
-        "Obscura wants to perform an action.";
+      break;
 
 
-      showConfirmation(
-        targetSummary
+    /* ---------------------------------------------
+       PRIVACY UPDATE
+       --------------------------------------------- */
+
+    case "PRIVACY_UPDATE":
+
+      updateCountersFromMessage(message);
+
+      break;
+
+
+    /* ---------------------------------------------
+       ACTION RESULT
+       --------------------------------------------- */
+
+    case "P6_ACTION_RESULT":
+
+      handleActionResult(message);
+
+      break;
+
+
+    default:
+      break;
+  }
+}
+
+
+/* =========================================================
+   REDACTED PREVIEW
+   ========================================================= */
+
+function handleRedactedPreview(message) {
+
+  /*
+   * Your existing background.js sends the latest
+   * original and redacted screenshots to the popup.
+   */
+
+  const original =
+    message.originalScreenshot ||
+    message.original ||
+    null;
+
+  const redacted =
+    message.redactedScreenshot ||
+    message.redacted ||
+    null;
+
+
+  if (original) {
+    showPreview(
+      originalPreview,
+      originalPlaceholder,
+      original
+    );
+  }
+
+
+  if (redacted) {
+    showPreview(
+      redactedPreview,
+      redactedPlaceholder,
+      redacted
+    );
+  }
+
+
+  /*
+   * Update privacy counters if supplied with
+   * the preview message.
+   */
+  updateCountersFromMessage(message);
+
+
+  /*
+   * Persist only the UI state needed to restore
+   * the popup.
+   */
+  saveState();
+}
+
+
+/* =========================================================
+   SHOW PREVIEW
+   ========================================================= */
+
+function showPreview(
+  imageElement,
+  placeholderElement,
+  imageData
+) {
+
+  const normalized =
+    normalizeImageData(imageData);
+
+  if (!normalized) {
+    return;
+  }
+
+
+  imageElement.src = normalized;
+
+  imageElement.classList.remove("hidden");
+
+  placeholderElement.style.display = "none";
+}
+
+
+/* =========================================================
+   IMAGE NORMALIZATION
+   ========================================================= */
+
+function normalizeImageData(value) {
+
+  if (!value) {
+    return null;
+  }
+
+
+  /*
+   * Already a data URL.
+   */
+  if (
+    typeof value === "string" &&
+    value.startsWith("data:")
+  ) {
+
+    return value;
+  }
+
+
+  /*
+   * Base64 PNG/JPEG without data URL prefix.
+   */
+  if (
+    typeof value === "string" &&
+    /^[A-Za-z0-9+/=\s]+$/.test(value)
+  ) {
+
+    return `data:image/png;base64,${value}`;
+  }
+
+
+  /*
+   * Blob/File-like objects are not expected from
+   * runtime messaging, but keep this safe.
+   */
+  return null;
+}
+
+
+/* =========================================================
+   COUNTERS
+   ========================================================= */
+
+function updateCountersFromMessage(message) {
+
+  if (!message) {
+    return;
+  }
+
+
+  /*
+   * Support direct counter fields.
+   */
+  if (
+    typeof message.piiDetected === "number"
+  ) {
+
+    setCounter(
+      piiCount,
+      message.piiDetected
+    );
+  }
+
+
+  if (
+    typeof message.pii_detected_count === "number"
+  ) {
+
+    setCounter(
+      piiCount,
+      message.pii_detected_count
+    );
+  }
+
+
+  if (
+    typeof message.redacted === "number"
+  ) {
+
+    setCounter(
+      redactedCount,
+      message.redacted
+    );
+  }
+
+
+  if (
+    typeof message.redacted_count === "number"
+  ) {
+
+    setCounter(
+      redactedCount,
+      message.redacted_count
+    );
+  }
+
+
+  if (
+    typeof message.sentToAI === "number"
+  ) {
+
+    setCounter(
+      sentCount,
+      message.sentToAI
+    );
+  }
+
+
+  if (
+    typeof message.sent_to_ai_count === "number"
+  ) {
+
+    setCounter(
+      sentCount,
+      message.sent_to_ai_count
+    );
+  }
+
+
+  /*
+   * Support a nested privacy payload from P3.
+   */
+  if (message.privacy_status) {
+
+    if (
+      typeof message.pii_detected_count === "number"
+    ) {
+
+      setCounter(
+        piiCount,
+        message.pii_detected_count
       );
+    }
 
+    if (
+      typeof message.redacted_count === "number"
+    ) {
+
+      setCounter(
+        redactedCount,
+        message.redacted_count
+      );
+    }
+
+    if (
+      typeof message.sent_to_ai_count === "number"
+    ) {
+
+      setCounter(
+        sentCount,
+        message.sent_to_ai_count
+      );
+    }
+  }
+
+
+  /*
+   * Support:
+   *
+   * {
+   *   counters: {
+   *      piiDetected,
+   *      redacted,
+   *      sentToAI
+   *   }
+   * }
+   */
+  if (message.counters) {
+
+    const counters = message.counters;
+
+
+    if (
+      typeof counters.piiDetected === "number"
+    ) {
+
+      setCounter(
+        piiCount,
+        counters.piiDetected
+      );
+    }
+
+
+    if (
+      typeof counters.redacted === "number"
+    ) {
+
+      setCounter(
+        redactedCount,
+        counters.redacted
+      );
+    }
+
+
+    if (
+      typeof counters.sentToAI === "number"
+    ) {
+
+      setCounter(
+        sentCount,
+        counters.sentToAI
+      );
+    }
+  }
+
+
+  saveState();
+}
+
+
+function setCounter(element, value) {
+
+  const safeValue =
+    Number.isFinite(Number(value))
+      ? Math.max(0, Number(value))
+      : 0;
+
+  element.textContent =
+    String(safeValue);
+}
+
+
+/* =========================================================
+   ACTION RESULT
+   ========================================================= */
+
+function handleActionResult(message) {
+
+  const result =
+    message.result ||
+    message;
+
+
+  if (!result) {
+    return;
+  }
+
+
+  switch (result.status) {
+
+    case "EXECUTED":
 
       setStatus(
-        "Waiting for your confirmation."
+        "Action executed. Continuing…",
+        "running"
+      );
+
+      break;
+
+
+    case "CONFIRMATION_PENDING":
+
+      setStatus(
+        "Waiting for your confirmation…",
+        "paused"
+      );
+
+      break;
+
+
+    case "BLOCKED":
+
+      setStatus(
+        result.reason ||
+        "Action blocked for safety.",
+        "error"
+      );
+
+      break;
+
+
+    case "FAILED":
+
+      setStatus(
+        result.reason ||
+        "Action failed.",
+        "error"
+      );
+
+      break;
+
+
+    default:
+      break;
+  }
+}
+
+
+/* =========================================================
+   RUNNING STATE
+   ========================================================= */
+
+function setRunningState(isRunning) {
+
+  const running =
+    Boolean(isRunning);
+
+
+  startBtn.disabled = running;
+
+  stopBtn.disabled = !running;
+
+  taskInput.disabled = running;
+
+
+  if (running) {
+
+    headerStatusDot.classList.remove(
+      "idle",
+      "error"
+    );
+
+    headerStatusDot.classList.add(
+      "running"
+    );
+
+  } else {
+
+    headerStatusDot.classList.remove(
+      "running",
+      "error"
+    );
+
+    headerStatusDot.classList.add(
+      "idle"
+    );
+  }
+
+
+  saveState();
+}
+
+
+/* =========================================================
+   STATUS
+   ========================================================= */
+
+function setStatus(
+  text,
+  type = "idle"
+) {
+
+  statusText.textContent =
+    text || DEFAULT_STATE.status;
+
+
+  statusBar.classList.remove(
+    "idle",
+    "running",
+    "success",
+    "error",
+    "paused"
+  );
+
+  statusBar.classList.add(
+    type
+  );
+
+
+  headerStatusDot.classList.remove(
+    "idle",
+    "running",
+    "error"
+  );
+
+
+  if (type === "running") {
+
+    headerStatusDot.classList.add(
+      "running"
+    );
+
+  } else if (type === "error") {
+
+    headerStatusDot.classList.add(
+      "error"
+    );
+
+  } else {
+
+    headerStatusDot.classList.add(
+      "idle"
+    );
+  }
+
+
+  saveState();
+}
+
+
+function normalizeStatusType(type) {
+
+  const validTypes = [
+    "idle",
+    "running",
+    "success",
+    "error",
+    "paused"
+  ];
+
+
+  return validTypes.includes(type)
+    ? type
+    : "idle";
+}
+
+
+/* =========================================================
+   STATE RESTORATION
+   ========================================================= */
+
+async function restoreState() {
+
+  try {
+
+    const stored =
+      await chrome.storage.local.get([
+        "obscura_task",
+        "obscura_status",
+        "obscura_status_type",
+        "obscura_capture_running",
+        "obscura_pii_detected",
+        "obscura_redacted",
+        "obscura_sent_to_ai",
+        "obscura_original_preview",
+        "obscura_redacted_preview"
+      ]);
+
+
+    if (stored.obscura_task) {
+
+      taskInput.value =
+        stored.obscura_task;
+    }
+
+
+    const running =
+      Boolean(
+        stored.obscura_capture_running
+      );
+
+
+    setRunningState(running);
+
+
+    if (stored.obscura_status) {
+
+      setStatus(
+        stored.obscura_status,
+        normalizeStatusType(
+          stored.obscura_status_type
+        )
+      );
+    }
+
+
+    if (
+      typeof stored.obscura_pii_detected ===
+      "number"
+    ) {
+
+      setCounter(
+        piiCount,
+        stored.obscura_pii_detected
+      );
+    }
+
+
+    if (
+      typeof stored.obscura_redacted ===
+      "number"
+    ) {
+
+      setCounter(
+        redactedCount,
+        stored.obscura_redacted
+      );
+    }
+
+
+    if (
+      typeof stored.obscura_sent_to_ai ===
+      "number"
+    ) {
+
+      setCounter(
+        sentCount,
+        stored.obscura_sent_to_ai
+      );
+    }
+
+
+    if (stored.obscura_original_preview) {
+
+      showPreview(
+        originalPreview,
+        originalPlaceholder,
+        stored.obscura_original_preview
+      );
+    }
+
+
+    if (stored.obscura_redacted_preview) {
+
+      showPreview(
+        redactedPreview,
+        redactedPlaceholder,
+        stored.obscura_redacted_preview
+      );
+    }
+
+
+  } catch (error) {
+
+    console.error(
+      "Could not restore Obscura popup state:",
+      error
+    );
+  }
+}
+
+
+/* =========================================================
+   STATE PERSISTENCE
+   ========================================================= */
+
+async function saveState() {
+
+  try {
+
+    const pii =
+      Number(piiCount.textContent) || 0;
+
+    const redacted =
+      Number(redactedCount.textContent) || 0;
+
+    const sent =
+      Number(sentCount.textContent) || 0;
+
+
+    await chrome.storage.local.set({
+
+      obscura_task:
+        taskInput.value.trim(),
+
+      obscura_status:
+        statusText.textContent,
+
+      obscura_status_type:
+        getCurrentStatusType(),
+
+      obscura_capture_running:
+        !stopBtn.disabled,
+
+      obscura_pii_detected:
+        pii,
+
+      obscura_redacted:
+        redacted,
+
+      obscura_sent_to_ai:
+        sent
+    });
+
+
+  } catch (error) {
+
+    console.error(
+      "Could not save Obscura popup state:",
+      error
+    );
+  }
+}
+
+
+function getCurrentStatusType() {
+
+  const classes =
+    statusBar.classList;
+
+
+  if (classes.contains("running")) {
+    return "running";
+  }
+
+  if (classes.contains("success")) {
+    return "success";
+  }
+
+  if (classes.contains("error")) {
+    return "error";
+  }
+
+  if (classes.contains("paused")) {
+    return "paused";
+  }
+
+  return "idle";
+}
+
+
+/* =========================================================
+   STORAGE LISTENER
+   ========================================================= */
+
+chrome.storage.onChanged.addListener(
+  (changes, areaName) => {
+
+    if (areaName !== "local") {
+      return;
+    }
+
+
+    if (
+      changes.obscura_status &&
+      changes.obscura_status.newValue !== undefined
+    ) {
+
+      setStatus(
+        changes.obscura_status.newValue,
+        normalizeStatusType(
+          changes.obscura_status_type?.newValue
+        )
+      );
+    }
+
+
+    if (
+      changes.obscura_capture_running &&
+      changes.obscura_capture_running.newValue !== undefined
+    ) {
+
+      setRunningState(
+        Boolean(
+          changes.obscura_capture_running.newValue
+        )
+      );
+    }
+
+
+    if (
+      changes.obscura_pii_detected &&
+      typeof changes.obscura_pii_detected.newValue ===
+      "number"
+    ) {
+
+      setCounter(
+        piiCount,
+        changes.obscura_pii_detected.newValue
+      );
+    }
+
+
+    if (
+      changes.obscura_redacted &&
+      typeof changes.obscura_redacted.newValue ===
+      "number"
+    ) {
+
+      setCounter(
+        redactedCount,
+        changes.obscura_redacted.newValue
+      );
+    }
+
+
+    if (
+      changes.obscura_sent_to_ai &&
+      typeof changes.obscura_sent_to_ai.newValue ===
+      "number"
+    ) {
+
+      setCounter(
+        sentCount,
+        changes.obscura_sent_to_ai.newValue
       );
     }
   }

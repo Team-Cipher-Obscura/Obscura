@@ -2,11 +2,6 @@
    OBSCURA POPUP
    ========================================================= */
 
-
-/* =========================================================
-   ELEMENTS
-   ========================================================= */
-
 const taskInput =
   document.getElementById("task-input");
 
@@ -18,9 +13,6 @@ const stopBtn =
 
 const statusBar =
   document.getElementById("status-bar");
-
-const statusDot =
-  document.getElementById("status-dot");
 
 const statusText =
   document.getElementById("status-text");
@@ -36,9 +28,6 @@ const redactedCount =
 
 const sentCount =
   document.getElementById("sent-count");
-
-const logo =
-  document.getElementById("obscura-logo");
 
 const originalPreview =
   document.getElementById("original-preview");
@@ -59,62 +48,10 @@ const redactedPlaceholder =
 
 document.addEventListener(
   "DOMContentLoaded",
-  async () => {
-
-    loadLogo();
-
-    setupListeners();
-
-    await restoreState();
-
-  }
+  restoreState
 );
 
-
-/* =========================================================
-   LOGO
-   ========================================================= */
-
-function loadLogo() {
-
-  /*
-   * IMPORTANT:
-   * The logo is inside:
-   *
-   * assets/obscura-logo.jpeg
-   *
-   * chrome.runtime.getURL() gives Chrome the
-   * actual packaged extension URL.
-   */
-
-  const logoUrl =
-    chrome.runtime.getURL(
-      "assets/obscura-logo.jpeg"
-    );
-
-  logo.src = logoUrl;
-
-
-  logo.onload = () => {
-
-    console.log(
-      "Obscura logo loaded:",
-      logoUrl
-    );
-
-  };
-
-
-  logo.onerror = () => {
-
-    console.error(
-      "Obscura logo could not be loaded:",
-      logoUrl
-    );
-
-  };
-
-}
+setupListeners();
 
 
 /* =========================================================
@@ -128,12 +65,10 @@ function setupListeners() {
     startCapture
   );
 
-
   stopBtn.addEventListener(
     "click",
     stopCapture
   );
-
 
   taskInput.addEventListener(
     "keydown",
@@ -188,7 +123,6 @@ async function startCapture() {
     taskInput.focus();
 
     return;
-
   }
 
 
@@ -205,7 +139,7 @@ async function startCapture() {
     const response =
       await chrome.runtime.sendMessage({
         type: "START_CAPTURE",
-        task: task
+        task
       });
 
 
@@ -223,7 +157,6 @@ async function startCapture() {
       );
 
       return;
-
     }
 
 
@@ -238,7 +171,7 @@ async function startCapture() {
   } catch (error) {
 
     console.error(
-      "START_CAPTURE error:",
+      "START_CAPTURE:",
       error
     );
 
@@ -269,7 +202,7 @@ async function stopCapture() {
   } catch (error) {
 
     console.error(
-      "STOP_CAPTURE error:",
+      "STOP_CAPTURE:",
       error
     );
 
@@ -278,14 +211,12 @@ async function stopCapture() {
 
   await chrome.storage.local.set({
 
-    obscura_capture_running:
-      false
+    obscura_capture_running: false
 
   });
 
 
   setRunning(false);
-
 
   setStatus(
     "Capture stopped.",
@@ -296,7 +227,7 @@ async function stopCapture() {
 
 
 /* =========================================================
-   BACKGROUND MESSAGES
+   MESSAGE HANDLER
    ========================================================= */
 
 function handleMessage(message) {
@@ -355,19 +286,7 @@ function handleMessage(message) {
 
 
     case "STATUS_UPDATE":
-
-      handleStatus(message);
-
-      break;
-
-
     case "STATUS":
-
-      handleStatus(message);
-
-      break;
-
-
     case "POPUP_STATUS":
 
       handleStatus(message);
@@ -393,20 +312,12 @@ function handleMessage(message) {
 
     default:
 
-      /*
-       * Allows status/counter messages that
-       * don't have a dedicated type.
-       */
-
       if (
         message.status ||
         message.message ||
-        message.pii_detected_count !==
-          undefined ||
-        message.redacted_count !==
-          undefined ||
-        message.sent_to_ai_count !==
-          undefined
+        message.pii_detected_count !== undefined ||
+        message.redacted_count !== undefined ||
+        message.sent_to_ai_count !== undefined
       ) {
 
         handleStatus(message);
@@ -421,7 +332,7 @@ function handleMessage(message) {
 
 
 /* =========================================================
-   STATUS MESSAGE
+   STATUS
    ========================================================= */
 
 function handleStatus(message) {
@@ -436,11 +347,9 @@ function handleStatus(message) {
 
     setStatus(
       text,
-      normalizeStatus(
-        message.statusType ||
-        message.status_type ||
-        "idle"
-      )
+      message.statusType ||
+      message.status_type ||
+      "idle"
     );
 
   }
@@ -452,9 +361,7 @@ function handleStatus(message) {
   ) {
 
     setRunning(
-      Boolean(
-        message.captureRunning
-      )
+      Boolean(message.captureRunning)
     );
 
   }
@@ -466,9 +373,7 @@ function handleStatus(message) {
   ) {
 
     setRunning(
-      Boolean(
-        message.capture_running
-      )
+      Boolean(message.capture_running)
     );
 
   }
@@ -542,9 +447,7 @@ function showImage(
 
   image.src = source;
 
-  image.classList.add(
-    "visible"
-  );
+  image.classList.add("visible");
 
   placeholder.style.display =
     "none";
@@ -553,7 +456,7 @@ function showImage(
 
 
 /* =========================================================
-   IMAGE DATA
+   IMAGE NORMALIZATION
    ========================================================= */
 
 function normalizeImage(data) {
@@ -630,38 +533,26 @@ function updateCounters(message) {
     counters.sent_to_ai;
 
 
-  if (
-    typeof pii === "number"
-  ) {
+  if (typeof pii === "number") {
 
     piiCount.textContent =
-      String(
-        Math.max(0, pii)
-      );
+      String(Math.max(0, pii));
 
   }
 
 
-  if (
-    typeof redacted === "number"
-  ) {
+  if (typeof redacted === "number") {
 
     redactedCount.textContent =
-      String(
-        Math.max(0, redacted)
-      );
+      String(Math.max(0, redacted));
 
   }
 
 
-  if (
-    typeof sent === "number"
-  ) {
+  if (typeof sent === "number") {
 
     sentCount.textContent =
-      String(
-        Math.max(0, sent)
-      );
+      String(Math.max(0, sent));
 
   }
 
@@ -687,48 +578,42 @@ function handleActionResult(message) {
   }
 
 
-  switch (result.status) {
+  if (result.status === "EXECUTED") {
 
-    case "EXECUTED":
+    setStatus(
+      "Action executed. Continuing…",
+      "running"
+    );
 
-      setStatus(
-        "Action executed. Continuing…",
-        "running"
-      );
+  } else if (
+    result.status ===
+    "CONFIRMATION_PENDING"
+  ) {
 
-      break;
+    setStatus(
+      "Waiting for your confirmation…",
+      "paused"
+    );
 
+  } else if (
+    result.status === "BLOCKED"
+  ) {
 
-    case "CONFIRMATION_PENDING":
+    setStatus(
+      result.reason ||
+      "Action blocked for safety.",
+      "error"
+    );
 
-      setStatus(
-        "Waiting for your confirmation…",
-        "paused"
-      );
+  } else if (
+    result.status === "FAILED"
+  ) {
 
-      break;
-
-
-    case "BLOCKED":
-
-      setStatus(
-        result.reason ||
-        "Action blocked for safety.",
-        "error"
-      );
-
-      break;
-
-
-    case "FAILED":
-
-      setStatus(
-        result.reason ||
-        "Action failed.",
-        "error"
-      );
-
-      break;
+    setStatus(
+      result.reason ||
+      "Action failed.",
+      "error"
+    );
 
   }
 
@@ -823,9 +708,7 @@ function setStatus(
       "running"
     );
 
-  } else if (
-    type === "error"
-  ) {
+  } else if (type === "error") {
 
     headerDot.classList.add(
       "error"
@@ -848,7 +731,7 @@ function setStatus(
 
 
 /* =========================================================
-   STATUS NORMALIZATION
+   STATUS TYPE
    ========================================================= */
 
 function normalizeStatus(type) {
@@ -903,9 +786,7 @@ async function restoreState() {
     ) {
 
       piiCount.textContent =
-        String(
-          state.obscura_pii_detected
-        );
+        state.obscura_pii_detected;
 
     }
 
@@ -916,9 +797,7 @@ async function restoreState() {
     ) {
 
       redactedCount.textContent =
-        String(
-          state.obscura_redacted
-        );
+        state.obscura_redacted;
 
     }
 
@@ -929,9 +808,7 @@ async function restoreState() {
     ) {
 
       sentCount.textContent =
-        String(
-          state.obscura_sent_to_ai
-        );
+        state.obscura_sent_to_ai;
 
     }
 
@@ -956,7 +833,7 @@ async function restoreState() {
   } catch (error) {
 
     console.error(
-      "Restore state error:",
+      "restoreState:",
       error
     );
 
@@ -974,19 +851,13 @@ function saveCounters() {
   chrome.storage.local.set({
 
     obscura_pii_detected:
-      Number(
-        piiCount.textContent
-      ) || 0,
+      Number(piiCount.textContent) || 0,
 
     obscura_redacted:
-      Number(
-        redactedCount.textContent
-      ) || 0,
+      Number(redactedCount.textContent) || 0,
 
     obscura_sent_to_ai:
-      Number(
-        sentCount.textContent
-      ) || 0
+      Number(sentCount.textContent) || 0
 
   });
 

@@ -2,29 +2,33 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <meta
+    name="viewport"
+    content="width=420, initial-scale=1.0"
+  >
+
   <title>Obscura</title>
+
   <link rel="stylesheet" href="popup.css">
 </head>
 
 <body>
 
-  <div class="popup">
+  <main class="popup">
 
     <!-- HEADER -->
     <header class="header">
 
       <div class="brand">
 
-        <div class="logo-box">
-          <img
-            id="obscura-logo"
-            class="logo"
-            alt="Obscura"
-          >
-        </div>
+        <img
+          src="assets/obscura-logo.jpeg"
+          alt="Obscura logo"
+          class="logo"
+        >
 
-        <div class="brand-text">
+        <div class="brand-copy">
           <div class="brand-title">
             Obscura
           </div>
@@ -36,10 +40,10 @@
 
       </div>
 
-      <div
+      <span
         id="header-dot"
         class="header-dot"
-      ></div>
+      ></span>
 
     </header>
 
@@ -48,8 +52,8 @@
     <section class="task-section">
 
       <label
-        class="task-label"
         for="task-input"
+        class="task-label"
       >
         Task
       </label>
@@ -106,10 +110,11 @@
     </section>
 
 
-    <!-- METRICS -->
+    <!-- COUNTERS -->
     <section class="metrics">
 
       <div class="metric">
+
         <div
           id="pii-count"
           class="metric-number"
@@ -120,10 +125,12 @@
         <div class="metric-name">
           PII detected
         </div>
+
       </div>
 
 
       <div class="metric">
+
         <div
           id="redacted-count"
           class="metric-number"
@@ -134,10 +141,12 @@
         <div class="metric-name">
           Redacted
         </div>
+
       </div>
 
 
       <div class="metric">
+
         <div
           id="sent-count"
           class="metric-number"
@@ -148,15 +157,16 @@
         <div class="metric-name">
           Sent to AI
         </div>
+
       </div>
 
     </section>
 
 
-    <!-- PREVIEW -->
+    <!-- CAPTURE PREVIEW -->
     <section class="preview-section">
 
-      <div class="preview-top">
+      <div class="preview-heading">
 
         <div>
           <h2>
@@ -168,23 +178,23 @@
           </p>
         </div>
 
-        <div class="protected">
+        <div class="protected-badge">
           <span class="shield">♢</span>
-          <span>Protected</span>
+          Protected
         </div>
 
       </div>
 
 
-      <div class="preview-label-row">
+      <div class="preview-labels">
 
         <div class="preview-label">
-          <span class="preview-dot original"></span>
+          <span class="label-dot original-dot"></span>
           Original
         </div>
 
         <div class="preview-label">
-          <span class="preview-dot redacted"></span>
+          <span class="label-dot redacted-dot"></span>
           Redacted
         </div>
 
@@ -193,7 +203,7 @@
 
       <div class="preview-grid">
 
-        <div class="preview-card">
+        <div class="preview-card original-card">
 
           <img
             id="original-preview"
@@ -201,12 +211,12 @@
             alt="Original screenshot"
           >
 
-          <div
+          <span
             id="original-placeholder"
-            class="placeholder"
+            class="preview-placeholder"
           >
             Original screenshot
-          </div>
+          </span>
 
         </div>
 
@@ -219,12 +229,12 @@
             alt="Redacted screenshot"
           >
 
-          <div
+          <span
             id="redacted-placeholder"
-            class="placeholder redacted-placeholder"
+            class="preview-placeholder redacted-placeholder"
           >
             Redacted screenshot
-          </div>
+          </span>
 
         </div>
 
@@ -246,7 +256,8 @@
 
     </footer>
 
-  </div>
+  </main>
+
 
   <script src="popup.js"></script>
 

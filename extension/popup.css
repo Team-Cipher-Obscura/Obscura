@@ -1,7 +1,3 @@
-/* =========================================================
-   OBSCURA POPUP
-   ========================================================= */
-
 * {
   box-sizing: border-box;
 }
@@ -33,7 +29,7 @@ body {
 
 
 /* =========================================================
-   MAIN
+   POPUP
    ========================================================= */
 
 .popup {
@@ -41,9 +37,6 @@ body {
   height: 600px;
 
   overflow: hidden;
-
-  display: flex;
-  flex-direction: column;
 
   background: #ffffff;
 }
@@ -54,8 +47,8 @@ body {
    ========================================================= */
 
 .header {
+  width: 100%;
   height: 88px;
-  min-height: 88px;
 
   display: flex;
   align-items: center;
@@ -70,6 +63,8 @@ body {
   display: flex;
   align-items: center;
 
+  min-width: 0;
+
   gap: 13px;
 }
 
@@ -78,55 +73,46 @@ body {
    LOGO
    ========================================================= */
 
-.logo-box {
+.logo {
   width: 58px;
   height: 58px;
 
   flex: 0 0 58px;
-
-  overflow: hidden;
-
-  border-radius: 14px;
-
-  background: #19132f;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.logo {
-  width: 58px;
-  height: 58px;
 
   display: block;
 
   object-fit: cover;
 
   border-radius: 14px;
+
+  background: #18132d;
 }
 
 
 /* =========================================================
-   BRAND TEXT
+   BRAND
    ========================================================= */
+
+.brand-copy {
+  min-width: 0;
+}
 
 .brand-title {
   font-size: 25px;
-  line-height: 28px;
+  line-height: 29px;
 
   font-weight: 700;
 
   letter-spacing: -0.5px;
 
-  color: #08080a;
+  color: #0b0b0d;
 }
 
 .brand-subtitle {
-  margin-top: 3px;
+  margin-top: 2px;
 
   font-size: 14px;
-  line-height: 17px;
+  line-height: 18px;
 
   color: #77727d;
 
@@ -134,7 +120,9 @@ body {
 }
 
 
-/* HEADER STATUS */
+/* =========================================================
+   HEADER DOT
+   ========================================================= */
 
 .header-dot {
   width: 11px;
@@ -157,12 +145,12 @@ body {
 
 
 /* =========================================================
-   TASK
+   TASK SECTION
    ========================================================= */
 
 .task-section {
+  width: 100%;
   height: 143px;
-  min-height: 143px;
 
   padding: 17px 24px 13px;
 }
@@ -189,7 +177,6 @@ body {
   padding: 0 17px;
 
   border: 1px solid #dedbe4;
-
   border-radius: 14px;
 
   outline: none;
@@ -197,20 +184,19 @@ body {
   background: #faf9fd;
 
   font-family: inherit;
-
   font-size: 16px;
 
   color: #222222;
 }
 
 #task-input::placeholder {
-  color: #b4b0b9;
+  color: #b5b1ba;
 }
 
 #task-input:focus {
-  background: #ffffff;
-
   border-color: #6845d8;
+
+  background: #ffffff;
 
   box-shadow:
     0 0 0 3px rgba(104, 69, 216, 0.08);
@@ -218,13 +204,11 @@ body {
 
 #task-input:disabled {
   background: #f5f4f7;
-
-  color: #88848c;
 }
 
 
 /* =========================================================
-   ACTION BUTTONS
+   BUTTON ROW
    ========================================================= */
 
 .action-row {
@@ -233,42 +217,52 @@ body {
 
   display: grid;
 
-  grid-template-columns:
-    minmax(0, 1fr)
-    78px;
+  grid-template-columns: 1fr 82px;
 
   gap: 10px;
 
   margin-top: 10px;
 }
 
+
+/* =========================================================
+   BOTH BUTTONS
+   ========================================================= */
+
 .start-btn,
 .stop-btn {
   width: 100%;
   height: 46px;
 
+  min-width: 0;
+
   margin: 0;
-  padding: 0;
+  padding: 0 10px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
   border-radius: 13px;
 
   font-family: inherit;
 
   font-size: 16px;
+  line-height: 1;
 
   font-weight: 600;
-
-  line-height: 46px;
-
-  text-align: center;
 
   white-space: nowrap;
 
   cursor: pointer;
+
+  appearance: none;
 }
 
 
-/* START */
+/* =========================================================
+   START BUTTON
+   ========================================================= */
 
 .start-btn {
   border: 1px solid #6845d8;
@@ -276,51 +270,63 @@ body {
   background: #6845d8;
 
   color: #ffffff;
+
+  box-shadow: none;
 }
 
 .start-btn:hover:not(:disabled) {
-  background: #5e3fd0;
+  background: #5d3ed0;
+}
+
+.start-btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .start-btn:disabled {
-  opacity: 0.58;
+  opacity: 0.55;
 
   cursor: not-allowed;
 }
 
 
-/* STOP */
+/* =========================================================
+   STOP BUTTON
+   ========================================================= */
 
 .stop-btn {
-  border: 1px solid #dedbe3;
+  border: 2px solid #dedbe4;
 
   background: #ffffff;
 
   color: #aaa7ae;
+
+  opacity: 1;
 }
 
 .stop-btn:disabled {
-  opacity: 1;
+  border: 2px solid #dedbe4;
+
+  background: #ffffff;
 
   color: #aaa7ae;
 
-  border-color: #e3e0e6;
-
-  background: #ffffff;
+  opacity: 1;
 
   cursor: not-allowed;
 }
 
 .stop-btn:not(:disabled) {
-  color: #d9534f;
-
-  border-color: #d8bdbc;
+  border: 2px solid #cfc9d8;
 
   background: #ffffff;
+
+  color: #5f5968;
 }
 
 .stop-btn:not(:disabled):hover {
-  background: #fff7f7;
+  background: #f8f6fb;
+
+  border-color: #bfb7ce;
 }
 
 
@@ -329,8 +335,8 @@ body {
    ========================================================= */
 
 .status-bar {
+  width: 100%;
   height: 45px;
-  min-height: 45px;
 
   display: flex;
   align-items: center;
@@ -364,7 +370,7 @@ body {
 }
 
 .status-bar.success .status-dot {
-  background: #6c8d6c;
+  background: #6b936c;
 }
 
 .status-bar.error .status-dot {
@@ -372,7 +378,7 @@ body {
 }
 
 .status-bar.paused .status-dot {
-  background: #d49b45;
+  background: #d29b45;
 }
 
 .status-text {
@@ -380,9 +386,9 @@ body {
 
   overflow: hidden;
 
-  text-overflow: ellipsis;
-
   white-space: nowrap;
+
+  text-overflow: ellipsis;
 }
 
 
@@ -391,15 +397,14 @@ body {
    ========================================================= */
 
 .metrics {
+  width: 100%;
   height: 84px;
-  min-height: 84px;
 
   display: grid;
 
-  grid-template-columns:
-    repeat(3, 1fr);
+  grid-template-columns: repeat(3, 1fr);
 
-  padding: 11px 10px;
+  padding: 10px;
 
   border-bottom: 1px solid #eeeeee;
 }
@@ -421,7 +426,7 @@ body {
 
 .metric-number {
   font-size: 28px;
-  line-height: 29px;
+  line-height: 30px;
 
   font-weight: 700;
 
@@ -429,7 +434,7 @@ body {
 }
 
 .metric-name {
-  margin-top: 4px;
+  margin-top: 3px;
 
   font-size: 12px;
   line-height: 15px;
@@ -445,13 +450,13 @@ body {
    ========================================================= */
 
 .preview-section {
+  width: 100%;
   height: 185px;
-  min-height: 185px;
 
   padding: 14px 24px 10px;
 }
 
-.preview-top {
+.preview-heading {
   display: flex;
 
   align-items: flex-start;
@@ -460,7 +465,7 @@ body {
   gap: 8px;
 }
 
-.preview-top h2 {
+.preview-heading h2 {
   margin: 0;
 
   font-size: 17px;
@@ -471,7 +476,7 @@ body {
   color: #5f5a67;
 }
 
-.preview-top p {
+.preview-heading p {
   margin: 3px 0 0;
 
   font-size: 11px;
@@ -484,10 +489,10 @@ body {
 
 
 /* =========================================================
-   PROTECTED
+   PROTECTED BADGE
    ========================================================= */
 
-.protected {
+.protected-badge {
   flex: 0 0 auto;
 
   display: flex;
@@ -495,7 +500,7 @@ body {
 
   gap: 5px;
 
-  padding: 6px 9px;
+  padding: 5px 9px;
 
   border-radius: 15px;
 
@@ -519,15 +524,16 @@ body {
    PREVIEW LABELS
    ========================================================= */
 
-.preview-label-row {
+.preview-labels {
+  width: 100%;
+
   display: grid;
 
-  grid-template-columns:
-    1fr 1fr;
+  grid-template-columns: 1fr 1fr;
 
   gap: 12px;
 
-  margin-top: 9px;
+  margin-top: 8px;
 
   margin-bottom: 5px;
 }
@@ -545,24 +551,24 @@ body {
   color: #716c77;
 }
 
-.preview-dot {
+.label-dot {
   width: 8px;
   height: 8px;
 
   border-radius: 3px;
 }
 
-.preview-dot.original {
+.original-dot {
   background: #aaa6af;
 }
 
-.preview-dot.redacted {
+.redacted-dot {
   background: #6845d8;
 }
 
 
 /* =========================================================
-   PREVIEW CARDS
+   PREVIEW GRID
    ========================================================= */
 
 .preview-grid {
@@ -570,8 +576,7 @@ body {
 
   display: grid;
 
-  grid-template-columns:
-    1fr 1fr;
+  grid-template-columns: 1fr 1fr;
 
   gap: 12px;
 }
@@ -584,6 +589,10 @@ body {
 
   overflow: hidden;
 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
   border: 1px dashed #dedbe4;
 
   border-radius: 11px;
@@ -592,9 +601,7 @@ body {
 }
 
 .redacted-card {
-  border-style: solid;
-
-  border-color: #e3def0;
+  border: 1px solid #e3def0;
 
   background: #f7f4fc;
 }
@@ -612,13 +619,12 @@ body {
   display: block;
 }
 
-.placeholder {
+.preview-placeholder {
   position: absolute;
 
   inset: 0;
 
   display: flex;
-
   align-items: center;
   justify-content: center;
 
@@ -626,9 +632,9 @@ body {
 
   font-size: 12px;
 
-  color: #aaa6b0;
-
   text-align: center;
+
+  color: #aaa6b0;
 }
 
 .redacted-placeholder {
@@ -641,11 +647,10 @@ body {
    ========================================================= */
 
 .footer {
+  width: 100%;
   height: 55px;
-  min-height: 55px;
 
   display: flex;
-
   align-items: center;
   justify-content: space-between;
 

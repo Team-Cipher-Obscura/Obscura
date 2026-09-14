@@ -1,35 +1,22 @@
 /* =========================================================
    OBSCURA POPUP
-   P1 UI Controller
+   P1 UI CONTROLLER
    ========================================================= */
 
-const DEFAULT_STATE = {
-  status: "Idle. Enter a task and click start.",
-  statusType: "idle",
+const taskInput =
+  document.getElementById("task-input");
 
-  captureRunning: false,
+const startBtn =
+  document.getElementById("start-btn");
 
-  piiDetected: 0,
-  redacted: 0,
-  sentToAI: 0,
+const stopBtn =
+  document.getElementById("stop-btn");
 
-  originalScreenshot: null,
-  redactedScreenshot: null
-};
+const statusBar =
+  document.getElementById("status-bar");
 
-
-/* =========================================================
-   DOM REFERENCES
-   ========================================================= */
-
-const taskInput = document.getElementById("task-input");
-
-const startBtn = document.getElementById("start-btn");
-const stopBtn = document.getElementById("stop-btn");
-
-const statusBar = document.getElementById("status-bar");
-const statusDot = document.getElementById("status-dot");
-const statusText = document.getElementById("status-text");
+const statusText =
+  document.getElementById("status-text");
 
 const headerStatusDot =
   document.getElementById("header-status-dot");
@@ -60,11 +47,16 @@ const redactedPlaceholder =
    INITIALIZATION
    ========================================================= */
 
-document.addEventListener("DOMContentLoaded", async () => {
-  await restoreState();
+document.addEventListener(
+  "DOMContentLoaded",
+  async () => {
 
-  setupEventListeners();
-});
+    setupEventListeners();
+
+    await restoreState();
+
+  }
+);
 
 
 /* =========================================================
@@ -73,53 +65,60 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 function setupEventListeners() {
 
-  startBtn.addEventListener("click", startCapture);
+  startBtn.addEventListener(
+    "click",
+    startCapture
+  );
 
-  stopBtn.addEventListener("click", stopCapture);
+
+  stopBtn.addEventListener(
+    "click",
+    stopCapture
+  );
 
 
-  /*
-   * Allow Enter to start the task.
-   */
-  taskInput.addEventListener("keydown", (event) => {
+  taskInput.addEventListener(
+    "keydown",
+    (event) => {
 
-    if (event.key !== "Enter") {
-      return;
+      if (event.key !== "Enter") {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (!startBtn.disabled) {
+        startCapture();
+      }
+
     }
-
-    event.preventDefault();
-
-    if (!startBtn.disabled) {
-      startCapture();
-    }
-  });
+  );
 
 
-  /*
-   * Receive updates from background.js.
-   */
   chrome.runtime.onMessage.addListener(
-    (message, sender, sendResponse) => {
+    (message) => {
 
-      if (!message || !message.type) {
-        return false;
+      if (!message?.type) {
+        return;
       }
 
       handleBackgroundMessage(message);
 
-      return false;
     }
   );
+
 }
 
 
 /* =========================================================
-   START
+   START CAPTURE
    ========================================================= */
 
 async function startCapture() {
 
-  const task = taskInput.value.trim();
+  const task =
+    taskInput.value.trim();
+
 
   if (!task) {
 
@@ -134,10 +133,8 @@ async function startCapture() {
   }
 
 
-  /*
-   * Optimistically update UI.
-   */
-  setRunningState(true);
+  setRunning(true);
+
 
   setStatus(
     "Starting capture cycle…",
@@ -154,17 +151,13 @@ async function startCapture() {
       });
 
 
-    /*
-     * Some background implementations may not return
-     * a response. Therefore only treat an explicit
-     * failure as an error.
-     */
-    if (response && response.valid === false) {
+    if (response?.valid === false) {
 
-      setRunningState(false);
+      setRunning(false);
 
       setStatus(
-        response.error || "Unable to start capture.",
+        response.error ||
+        "Unable to start capture.",
         "error"
       );
 
@@ -172,83 +165,62 @@ async function startCapture() {
     }
 
 
-    /*
-     * Save task locally so popup reopening does not
-     * immediately lose the entered task.
-     */
     await chrome.storage.local.set({
       obscura_task: task
     });
 
+
   } catch (error) {
 
     console.error(
-      "Failed to start Obscura:",
+      "Obscura start error:",
       error
     );
 
-    setRunningState(false);
+
+    setRunning(false);
+
 
     setStatus(
       "Could not start capture.",
       "error"
     );
+
   }
+
 }
 
 
 /* =========================================================
-   STOP
+   STOP CAPTURE
    ========================================================= */
 
 async function stopCapture() {
 
-  setStatus(
-    "Stopping capture…",
-    "running"
-  );
-
-
   try {
 
-    const response =
-      await chrome.runtime.sendMessage({
-        type: "STOP_CAPTURE"
-      });
-
-
-    if (response && response.valid === false) {
-
-      setStatus(
-        response.error || "Unable to stop capture.",
-        "error"
-      );
-
-      return;
-    }
-
-
-    setRunningState(false);
-
-    setStatus(
-      "Capture stopped.",
-      "idle"
-    );
+    await chrome.runtime.sendMessage({
+      type: "STOP_CAPTURE"
+    });
 
   } catch (error) {
 
     console.error(
-      "Failed to stop Obscura:",
+      "Obscura stop error:",
       error
     );
 
-    setRunningState(false);
-
-    setStatus(
-      "Capture stopped.",
-      "idle"
-    );
   }
+
+
+  setRunning(false);
+
+
+  setStatus(
+    "Capture stopped.",
+    "idle"
+  );
+
 }
 
 
@@ -260,92 +232,79 @@ function handleBackgroundMessage(message) {
 
   switch (message.type) {
 
-
-    /* ---------------------------------------------
-       REDACTED PREVIEW
-       --------------------------------------------- */
-
     case "REDACTED_PREVIEW":
 
-      handleRedactedPreview(message);
+      updatePreview(message);
+
+      updateCounters(message);
 
       break;
 
 
-    /* ---------------------------------------------
-       CAPTURE STARTED
-       --------------------------------------------- */
-
     case "CAPTURE_STARTED":
 
-      setRunningState(true);
+      setRunning(true);
 
       setStatus(
-        message.status || "Capture cycle running…",
+        message.status ||
+        "Capture cycle running…",
         "running"
       );
 
       break;
 
 
-    /* ---------------------------------------------
-       CAPTURE STOPPED
-       --------------------------------------------- */
-
     case "CAPTURE_STOPPED":
 
-      setRunningState(false);
+      setRunning(false);
 
       setStatus(
-        message.status || "Capture stopped.",
+        message.status ||
+        "Capture stopped.",
         "idle"
       );
 
       break;
 
 
-    /* ---------------------------------------------
-       STATUS UPDATE
-       --------------------------------------------- */
-
     case "STATUS_UPDATE":
 
-      if (typeof message.status === "string") {
+      if (message.status) {
 
         setStatus(
           message.status,
-          normalizeStatusType(message.statusType)
+          message.statusType ||
+          "idle"
         );
+
       }
+
 
       if (
-        message.captureRunning !== undefined
+        message.captureRunning !==
+        undefined
       ) {
 
-        setRunningState(
-          Boolean(message.captureRunning)
+        setRunning(
+          Boolean(
+            message.captureRunning
+          )
         );
+
       }
 
-      updateCountersFromMessage(message);
+
+      updateCounters(message);
 
       break;
 
-
-    /* ---------------------------------------------
-       PRIVACY UPDATE
-       --------------------------------------------- */
 
     case "PRIVACY_UPDATE":
 
-      updateCountersFromMessage(message);
+      updateCounters(message);
 
       break;
 
-
-    /* ---------------------------------------------
-       ACTION RESULT
-       --------------------------------------------- */
 
     case "P6_ACTION_RESULT":
 
@@ -356,25 +315,23 @@ function handleBackgroundMessage(message) {
 
     default:
       break;
+
   }
+
 }
 
 
 /* =========================================================
-   REDACTED PREVIEW
+   PREVIEW
    ========================================================= */
 
-function handleRedactedPreview(message) {
-
-  /*
-   * Your existing background.js sends the latest
-   * original and redacted screenshots to the popup.
-   */
+function updatePreview(message) {
 
   const original =
     message.originalScreenshot ||
     message.original ||
     null;
+
 
   const redacted =
     message.redactedScreenshot ||
@@ -383,35 +340,26 @@ function handleRedactedPreview(message) {
 
 
   if (original) {
+
     showPreview(
       originalPreview,
       originalPlaceholder,
       original
     );
+
   }
 
 
   if (redacted) {
+
     showPreview(
       redactedPreview,
       redactedPlaceholder,
       redacted
     );
+
   }
 
-
-  /*
-   * Update privacy counters if supplied with
-   * the preview message.
-   */
-  updateCountersFromMessage(message);
-
-
-  /*
-   * Persist only the UI state needed to restore
-   * the popup.
-   */
-  saveState();
 }
 
 
@@ -420,24 +368,29 @@ function handleRedactedPreview(message) {
    ========================================================= */
 
 function showPreview(
-  imageElement,
-  placeholderElement,
-  imageData
+  image,
+  placeholder,
+  data
 ) {
 
-  const normalized =
-    normalizeImageData(imageData);
+  const src =
+    normalizeImageData(data);
 
-  if (!normalized) {
+
+  if (!src) {
     return;
   }
 
 
-  imageElement.src = normalized;
+  image.src = src;
 
-  imageElement.classList.remove("hidden");
+  image.classList.remove(
+    "hidden"
+  );
 
-  placeholderElement.style.display = "none";
+  placeholder.style.display =
+    "none";
+
 }
 
 
@@ -445,42 +398,35 @@ function showPreview(
    IMAGE NORMALIZATION
    ========================================================= */
 
-function normalizeImageData(value) {
+function normalizeImageData(data) {
 
-  if (!value) {
+  if (!data) {
     return null;
   }
 
 
-  /*
-   * Already a data URL.
-   */
   if (
-    typeof value === "string" &&
-    value.startsWith("data:")
+    typeof data === "string" &&
+    data.startsWith("data:")
   ) {
 
-    return value;
+    return data;
+
   }
 
 
-  /*
-   * Base64 PNG/JPEG without data URL prefix.
-   */
-  if (
-    typeof value === "string" &&
-    /^[A-Za-z0-9+/=\s]+$/.test(value)
-  ) {
+  if (typeof data === "string") {
 
-    return `data:image/png;base64,${value}`;
+    return (
+      "data:image/png;base64," +
+      data
+    );
+
   }
 
 
-  /*
-   * Blob/File-like objects are not expected from
-   * runtime messaging, but keep this safe.
-   */
   return null;
+
 }
 
 
@@ -488,187 +434,66 @@ function normalizeImageData(value) {
    COUNTERS
    ========================================================= */
 
-function updateCountersFromMessage(message) {
+function updateCounters(message) {
 
   if (!message) {
     return;
   }
 
 
-  /*
-   * Support direct counter fields.
-   */
-  if (
-    typeof message.piiDetected === "number"
-  ) {
+  const counters =
+    message.counters || {};
 
-    setCounter(
-      piiCount,
-      message.piiDetected
-    );
+
+  const pii =
+    message.pii_detected_count ??
+    message.piiDetected ??
+    counters.piiDetected;
+
+
+  const redacted =
+    message.redacted_count ??
+    message.redacted ??
+    counters.redacted;
+
+
+  const sent =
+    message.sent_to_ai_count ??
+    message.sentToAI ??
+    counters.sentToAI;
+
+
+  if (typeof pii === "number") {
+
+    piiCount.textContent =
+      Math.max(0, pii);
+
   }
 
 
-  if (
-    typeof message.pii_detected_count === "number"
-  ) {
+  if (typeof redacted === "number") {
 
-    setCounter(
-      piiCount,
-      message.pii_detected_count
-    );
+    redactedCount.textContent =
+      Math.max(0, redacted);
+
   }
 
 
-  if (
-    typeof message.redacted === "number"
-  ) {
+  if (typeof sent === "number") {
 
-    setCounter(
-      redactedCount,
-      message.redacted
-    );
+    sentCount.textContent =
+      Math.max(0, sent);
+
   }
 
 
-  if (
-    typeof message.redacted_count === "number"
-  ) {
+  saveCounters();
 
-    setCounter(
-      redactedCount,
-      message.redacted_count
-    );
-  }
-
-
-  if (
-    typeof message.sentToAI === "number"
-  ) {
-
-    setCounter(
-      sentCount,
-      message.sentToAI
-    );
-  }
-
-
-  if (
-    typeof message.sent_to_ai_count === "number"
-  ) {
-
-    setCounter(
-      sentCount,
-      message.sent_to_ai_count
-    );
-  }
-
-
-  /*
-   * Support a nested privacy payload from P3.
-   */
-  if (message.privacy_status) {
-
-    if (
-      typeof message.pii_detected_count === "number"
-    ) {
-
-      setCounter(
-        piiCount,
-        message.pii_detected_count
-      );
-    }
-
-    if (
-      typeof message.redacted_count === "number"
-    ) {
-
-      setCounter(
-        redactedCount,
-        message.redacted_count
-      );
-    }
-
-    if (
-      typeof message.sent_to_ai_count === "number"
-    ) {
-
-      setCounter(
-        sentCount,
-        message.sent_to_ai_count
-      );
-    }
-  }
-
-
-  /*
-   * Support:
-   *
-   * {
-   *   counters: {
-   *      piiDetected,
-   *      redacted,
-   *      sentToAI
-   *   }
-   * }
-   */
-  if (message.counters) {
-
-    const counters = message.counters;
-
-
-    if (
-      typeof counters.piiDetected === "number"
-    ) {
-
-      setCounter(
-        piiCount,
-        counters.piiDetected
-      );
-    }
-
-
-    if (
-      typeof counters.redacted === "number"
-    ) {
-
-      setCounter(
-        redactedCount,
-        counters.redacted
-      );
-    }
-
-
-    if (
-      typeof counters.sentToAI === "number"
-    ) {
-
-      setCounter(
-        sentCount,
-        counters.sentToAI
-      );
-    }
-  }
-
-
-  saveState();
-}
-
-
-function setCounter(element, value) {
-
-  const safeValue =
-    Number.isFinite(Number(value))
-      ? Math.max(0, Number(value))
-      : 0;
-
-  element.textContent =
-    String(safeValue);
 }
 
 
 /* =========================================================
-   ACTION RESULT
+   P6 ACTION RESULT
    ========================================================= */
 
 function handleActionResult(message) {
@@ -726,10 +551,8 @@ function handleActionResult(message) {
 
       break;
 
-
-    default:
-      break;
   }
+
 }
 
 
@@ -737,44 +560,37 @@ function handleActionResult(message) {
    RUNNING STATE
    ========================================================= */
 
-function setRunningState(isRunning) {
+function setRunning(running) {
 
-  const running =
-    Boolean(isRunning);
-
-
-  startBtn.disabled = running;
-
-  stopBtn.disabled = !running;
-
-  taskInput.disabled = running;
+  running =
+    Boolean(running);
 
 
-  if (running) {
-
-    headerStatusDot.classList.remove(
-      "idle",
-      "error"
-    );
-
-    headerStatusDot.classList.add(
-      "running"
-    );
-
-  } else {
-
-    headerStatusDot.classList.remove(
-      "running",
-      "error"
-    );
-
-    headerStatusDot.classList.add(
-      "idle"
-    );
-  }
+  startBtn.disabled =
+    running;
 
 
-  saveState();
+  stopBtn.disabled =
+    !running;
+
+
+  taskInput.disabled =
+    running;
+
+
+  headerStatusDot.classList.remove(
+    "idle",
+    "running",
+    "error"
+  );
+
+
+  headerStatusDot.classList.add(
+    running
+      ? "running"
+      : "idle"
+  );
+
 }
 
 
@@ -788,7 +604,7 @@ function setStatus(
 ) {
 
   statusText.textContent =
-    text || DEFAULT_STATE.status;
+    text;
 
 
   statusBar.classList.remove(
@@ -798,6 +614,7 @@ function setStatus(
     "error",
     "paused"
   );
+
 
   statusBar.classList.add(
     type
@@ -811,16 +628,16 @@ function setStatus(
   );
 
 
-  if (type === "running") {
-
-    headerStatusDot.classList.add(
-      "running"
-    );
-
-  } else if (type === "error") {
+  if (type === "error") {
 
     headerStatusDot.classList.add(
       "error"
+    );
+
+  } else if (type === "running") {
+
+    headerStatusDot.classList.add(
+      "running"
     );
 
   } else {
@@ -828,39 +645,32 @@ function setStatus(
     headerStatusDot.classList.add(
       "idle"
     );
+
   }
 
 
-  saveState();
-}
+  chrome.storage.local.set({
 
+    obscura_status:
+      text,
 
-function normalizeStatusType(type) {
+    obscura_status_type:
+      type
 
-  const validTypes = [
-    "idle",
-    "running",
-    "success",
-    "error",
-    "paused"
-  ];
+  });
 
-
-  return validTypes.includes(type)
-    ? type
-    : "idle";
 }
 
 
 /* =========================================================
-   STATE RESTORATION
+   RESTORE STATE
    ========================================================= */
 
 async function restoreState() {
 
   try {
 
-    const stored =
+    const state =
       await chrome.storage.local.get([
         "obscura_task",
         "obscura_status",
@@ -868,259 +678,104 @@ async function restoreState() {
         "obscura_capture_running",
         "obscura_pii_detected",
         "obscura_redacted",
-        "obscura_sent_to_ai",
-        "obscura_original_preview",
-        "obscura_redacted_preview"
+        "obscura_sent_to_ai"
       ]);
 
 
-    if (stored.obscura_task) {
+    if (state.obscura_task) {
 
       taskInput.value =
-        stored.obscura_task;
+        state.obscura_task;
+
     }
 
 
-    const running =
+    if (
+      typeof state.obscura_pii_detected ===
+      "number"
+    ) {
+
+      piiCount.textContent =
+        state.obscura_pii_detected;
+
+    }
+
+
+    if (
+      typeof state.obscura_redacted ===
+      "number"
+    ) {
+
+      redactedCount.textContent =
+        state.obscura_redacted;
+
+    }
+
+
+    if (
+      typeof state.obscura_sent_to_ai ===
+      "number"
+    ) {
+
+      sentCount.textContent =
+        state.obscura_sent_to_ai;
+
+    }
+
+
+    if (state.obscura_status) {
+
+      setStatus(
+        state.obscura_status,
+        state.obscura_status_type ||
+        "idle"
+      );
+
+    }
+
+
+    setRunning(
       Boolean(
-        stored.obscura_capture_running
-      );
-
-
-    setRunningState(running);
-
-
-    if (stored.obscura_status) {
-
-      setStatus(
-        stored.obscura_status,
-        normalizeStatusType(
-          stored.obscura_status_type
-        )
-      );
-    }
-
-
-    if (
-      typeof stored.obscura_pii_detected ===
-      "number"
-    ) {
-
-      setCounter(
-        piiCount,
-        stored.obscura_pii_detected
-      );
-    }
-
-
-    if (
-      typeof stored.obscura_redacted ===
-      "number"
-    ) {
-
-      setCounter(
-        redactedCount,
-        stored.obscura_redacted
-      );
-    }
-
-
-    if (
-      typeof stored.obscura_sent_to_ai ===
-      "number"
-    ) {
-
-      setCounter(
-        sentCount,
-        stored.obscura_sent_to_ai
-      );
-    }
-
-
-    if (stored.obscura_original_preview) {
-
-      showPreview(
-        originalPreview,
-        originalPlaceholder,
-        stored.obscura_original_preview
-      );
-    }
-
-
-    if (stored.obscura_redacted_preview) {
-
-      showPreview(
-        redactedPreview,
-        redactedPlaceholder,
-        stored.obscura_redacted_preview
-      );
-    }
+        state.obscura_capture_running
+      )
+    );
 
 
   } catch (error) {
 
     console.error(
-      "Could not restore Obscura popup state:",
+      "Could not restore popup state:",
       error
     );
+
   }
+
 }
 
 
 /* =========================================================
-   STATE PERSISTENCE
+   SAVE COUNTERS
    ========================================================= */
 
-async function saveState() {
+function saveCounters() {
 
-  try {
+  chrome.storage.local.set({
 
-    const pii =
-      Number(piiCount.textContent) || 0;
+    obscura_pii_detected:
+      Number(
+        piiCount.textContent
+      ) || 0,
 
-    const redacted =
-      Number(redactedCount.textContent) || 0;
+    obscura_redacted:
+      Number(
+        redactedCount.textContent
+      ) || 0,
 
-    const sent =
-      Number(sentCount.textContent) || 0;
+    obscura_sent_to_ai:
+      Number(
+        sentCount.textContent
+      ) || 0
 
+  });
 
-    await chrome.storage.local.set({
-
-      obscura_task:
-        taskInput.value.trim(),
-
-      obscura_status:
-        statusText.textContent,
-
-      obscura_status_type:
-        getCurrentStatusType(),
-
-      obscura_capture_running:
-        !stopBtn.disabled,
-
-      obscura_pii_detected:
-        pii,
-
-      obscura_redacted:
-        redacted,
-
-      obscura_sent_to_ai:
-        sent
-    });
-
-
-  } catch (error) {
-
-    console.error(
-      "Could not save Obscura popup state:",
-      error
-    );
-  }
 }
-
-
-function getCurrentStatusType() {
-
-  const classes =
-    statusBar.classList;
-
-
-  if (classes.contains("running")) {
-    return "running";
-  }
-
-  if (classes.contains("success")) {
-    return "success";
-  }
-
-  if (classes.contains("error")) {
-    return "error";
-  }
-
-  if (classes.contains("paused")) {
-    return "paused";
-  }
-
-  return "idle";
-}
-
-
-/* =========================================================
-   STORAGE LISTENER
-   ========================================================= */
-
-chrome.storage.onChanged.addListener(
-  (changes, areaName) => {
-
-    if (areaName !== "local") {
-      return;
-    }
-
-
-    if (
-      changes.obscura_status &&
-      changes.obscura_status.newValue !== undefined
-    ) {
-
-      setStatus(
-        changes.obscura_status.newValue,
-        normalizeStatusType(
-          changes.obscura_status_type?.newValue
-        )
-      );
-    }
-
-
-    if (
-      changes.obscura_capture_running &&
-      changes.obscura_capture_running.newValue !== undefined
-    ) {
-
-      setRunningState(
-        Boolean(
-          changes.obscura_capture_running.newValue
-        )
-      );
-    }
-
-
-    if (
-      changes.obscura_pii_detected &&
-      typeof changes.obscura_pii_detected.newValue ===
-      "number"
-    ) {
-
-      setCounter(
-        piiCount,
-        changes.obscura_pii_detected.newValue
-      );
-    }
-
-
-    if (
-      changes.obscura_redacted &&
-      typeof changes.obscura_redacted.newValue ===
-      "number"
-    ) {
-
-      setCounter(
-        redactedCount,
-        changes.obscura_redacted.newValue
-      );
-    }
-
-
-    if (
-      changes.obscura_sent_to_ai &&
-      typeof changes.obscura_sent_to_ai.newValue ===
-      "number"
-    ) {
-
-      setCounter(
-        sentCount,
-        changes.obscura_sent_to_ai.newValue
-      );
-    }
-  }
-);

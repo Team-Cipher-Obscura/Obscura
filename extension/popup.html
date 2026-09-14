@@ -1,22 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1.0"
-  />
+  >
 
   <title>Obscura</title>
 
-  <link rel="stylesheet" href="popup.css" />
+  <link rel="stylesheet" href="popup.css">
 </head>
 
 <body>
 
-  <div class="popup-container">
+  <main class="popup-container">
 
     <!-- ================= HEADER ================= -->
+
     <header class="header">
 
       <div class="brand">
@@ -26,7 +27,7 @@
             src="assets/obscura-logo.jpeg"
             alt="Obscura"
             class="logo"
-          />
+          >
         </div>
 
         <div class="brand-text">
@@ -36,15 +37,16 @@
 
       </div>
 
-      <div
+      <span
         id="header-status-dot"
         class="header-status-dot idle"
-      ></div>
+      ></span>
 
     </header>
 
 
     <!-- ================= TASK ================= -->
+
     <section class="task-section">
 
       <label
@@ -57,11 +59,11 @@
       <input
         id="task-input"
         type="text"
-        autocomplete="off"
         placeholder="e.g. Find Mumbai flight"
-      />
+        autocomplete="off"
+      >
 
-      <div class="task-buttons">
+      <div class="task-actions">
 
         <button
           id="start-btn"
@@ -86,6 +88,7 @@
 
 
     <!-- ================= STATUS ================= -->
+
     <section
       id="status-bar"
       class="status-bar idle"
@@ -103,71 +106,76 @@
     </section>
 
 
-    <!-- ================= COUNTERS ================= -->
+    <!-- ================= METRICS ================= -->
+
     <section class="metrics">
 
       <div class="metric">
 
-        <div
+        <span
           id="pii-count"
           class="metric-value"
         >
           0
-        </div>
+        </span>
 
-        <div class="metric-label">
+        <span class="metric-label">
           PII detected
-        </div>
+        </span>
 
       </div>
 
 
       <div class="metric">
 
-        <div
+        <span
           id="redacted-count"
           class="metric-value"
         >
           0
-        </div>
+        </span>
 
-        <div class="metric-label">
+        <span class="metric-label">
           Redacted
-        </div>
+        </span>
 
       </div>
 
 
       <div class="metric">
 
-        <div
+        <span
           id="sent-count"
           class="metric-value"
         >
           0
-        </div>
+        </span>
 
-        <div class="metric-label">
+        <span class="metric-label">
           Sent to AI
-        </div>
+        </span>
 
       </div>
 
     </section>
 
 
-    <!-- ================= PREVIEW ================= -->
+    <!-- ================= CAPTURE PREVIEW ================= -->
+
     <section class="preview-section">
 
-      <div class="preview-header">
+      <div class="preview-heading">
 
-        <div>
+        <div class="preview-title">
+
           <h2>Capture preview</h2>
 
           <p>
             Latest frame before and after redaction
           </p>
+
         </div>
+
 
         <div class="protected-badge">
 
@@ -175,7 +183,9 @@
             ♢
           </span>
 
-          Protected
+          <span>
+            Protected
+          </span>
 
         </div>
 
@@ -183,57 +193,72 @@
 
 
       <!-- Preview labels -->
+
       <div class="preview-labels">
 
-        <div class="preview-label original-label">
-          <span class="label-dot"></span>
-          Original
+        <div class="preview-label">
+
+          <span class="label-dot original-dot"></span>
+
+          <span>
+            Original
+          </span>
+
         </div>
 
-        <div class="preview-label redacted-label">
-          <span class="label-dot"></span>
-          Redacted
+
+        <div class="preview-label">
+
+          <span class="label-dot redacted-dot"></span>
+
+          <span>
+            Redacted
+          </span>
+
         </div>
 
       </div>
 
 
-      <!-- Preview images -->
+      <!-- Preview cards -->
+
       <div class="preview-grid">
 
         <!-- Original -->
-        <div class="preview-card">
+
+        <div class="preview-card original-card">
 
           <img
             id="original-preview"
             class="preview-image hidden"
             alt="Original screenshot"
-          />
+          >
 
           <div
             id="original-placeholder"
             class="preview-placeholder"
           >
-            <span>Original screenshot</span>
+            Original screenshot
           </div>
 
         </div>
 
 
         <!-- Redacted -->
+
         <div class="preview-card redacted-card">
 
           <img
             id="redacted-preview"
             class="preview-image hidden"
             alt="Redacted screenshot"
-          />
+          >
 
           <div
             id="redacted-placeholder"
-            class="preview-placeholder redacted-placeholder"
+            class="preview-placeholder"
           >
-            <span>Redacted screenshot</span>
+            Redacted screenshot
           </div>
 
         </div>
@@ -244,15 +269,20 @@
 
 
     <!-- ================= FOOTER ================= -->
+
     <footer class="footer">
 
-      <span>Obscura</span>
+      <span>
+        Obscura
+      </span>
 
-      <span>P1 capture pipeline</span>
+      <span>
+        P1 capture pipeline
+      </span>
 
     </footer>
 
-  </div>
+  </main>
 
 
   <script src="popup.js"></script>

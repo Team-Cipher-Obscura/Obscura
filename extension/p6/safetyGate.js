@@ -184,7 +184,8 @@ export function evaluateAction(
     // allowed to operate without a DOM target.
     if (
       action === "scroll" ||
-      action === "wait"
+      action === "wait" ||
+      action === "done"
     ) {
 
       return {

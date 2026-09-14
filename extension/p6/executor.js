@@ -247,6 +247,17 @@ async function executeWait(agentAction) {
     agentAction?.metadata?.duration ??
     agentAction?.metadata?.ms;
 
+  /*
+   * P5 sends "wait" as a no-op signal in three cases — nothing changed,
+   * low confidence, or a blocked sensitive field — and none of them
+   * include a duration. Treat "no duration provided" as an immediate
+   * no-op success rather than an error. Only actually sleep if a caller
+   * explicitly supplies one.
+   */
+  if (duration === undefined || duration === null) {
+    return executed(agentAction.action, targetId, "NO_OP_WAIT");
+  }
+
   if (
     typeof duration !== "number" ||
     !Number.isFinite(duration) ||
@@ -275,6 +286,16 @@ async function executeWait(agentAction) {
       error?.message || "WAIT_FAILED"
     );
   }
+}
+
+function executeDone(agentAction) {
+  // "done" carries no DOM target and requires no browser action —
+  // P5 uses it to signal the task is complete. Nothing to execute.
+  return executed(
+    agentAction.action,
+    getElementTargetId(agentAction),
+    "TASK_COMPLETE"
+  );
 }
 
 /**
@@ -307,6 +328,9 @@ export async function executeAction(agentAction, element = null) {
 
     case "wait":
       return executeWait(agentAction);
+
+    case "done":
+      return executeDone(agentAction);
 
     default:
       return failed(

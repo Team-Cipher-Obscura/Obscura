@@ -15,7 +15,8 @@ export const SECURITY_POLICY = Object.freeze({
     "type",
     "scroll",
     "navigate",
-    "wait"
+    "wait",
+    "done"
   ]),
 
   // Only these URL schemes may be navigated to.

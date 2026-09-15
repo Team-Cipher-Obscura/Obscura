@@ -20,47 +20,20 @@
 // P1 owns cycle_id.
 // Downstream stages must never replace it.
 //
-// P1 owns the task and explicitly forwards it to P4
+// P1 also owns the task and explicitly forwards it to P4
 // because P3's toP4 payload does not contain the task.
 //
-// ==================================================
-// TASK / TAB BEHAVIOUR
-// ==================================================
+// TASK/TAB BEHAVIOUR:
 //
-// Each started task gets its own task session.
+// When a task starts, P1 binds that task to the tab where
+// the task was started.
 //
-// Example:
+// Switching to another tab does NOT move the task to the
+// new tab.
 //
-//   Task A → Tab A
-//       ↓
-//   user switches to Tab B
-//       ↓
-//   Task A continues on Tab A
-//
-//   Start Task B on Tab B
-//       ↓
-//   Task A continues on Tab A
-//   Task B starts on Tab B
-//
-// A cycle always retains the tab that belongs to its
-// task session.
-//
-// The current active tab is ONLY used when START_CAPTURE
-// creates a NEW task session.
-//
-// ==================================================
-//
-// SCREENSHOT BEHAVIOUR
-// ==================================================
-//
-// chrome.tabs.captureVisibleTab() only captures the
-// currently visible tab.
-//
-// To preserve task ownership when the task tab becomes
-// inactive, P1 uses chrome.debugger + CDP
-// Page.captureScreenshot against the task tab.
-//
-// ==================================================
+// chrome.tabs.captureVisibleTab() captures the currently
+// visible tab. Therefore P1 waits while the task tab is
+// inactive and resumes when the user returns to it.
 //
 // P5 may return:
 //   click
@@ -71,11 +44,28 @@
 //   done
 //
 // "done" is the explicit task-completion signal.
-// ==================================================
+//
+// P6 confirmation and sensitive-field waits pause the
+// capture loop until the relevant user interaction is
+// completed.
 
 
 // ==================================================
 // Load P4
+// ==================================================
+//
+// p4/vite.config.js builds:
+//
+//   p4Listener.js
+//        ↓
+//   extension/dist/p4-listener.js
+//
+// The bundle exposes:
+//
+//   globalThis.handleP4Input
+//
+// P4 therefore executes inside the P1 background
+// service-worker context.
 // ==================================================
 
 importScripts("./dist/p4-listener.js");
@@ -120,39 +110,33 @@ const P5_ENDPOINT =
 
 
 // ==================================================
-// Task sessions
-// ==================================================
-//
-// Each session:
-//
-// {
-//   id,
-//   task,
-//   tabId,
-//   windowId,
-//   running,
-//   paused,
-//   pauseReason,
-//   currentCycleId
-// }
-//
+// Capture state
 // ==================================================
 
-const taskSessions =
-  new Map();
+let captureRunning =
+  false;
+
+let currentTask =
+  null;
+
+let currentCycleId =
+  null;
 
 
 // ==================================================
-// Session scheduler state
-// ==================================================
+// Task tab state
 //
-// Each session has its own async loop.
+// The task is permanently bound to the tab where
+// the task was started.
 //
-// This map prevents accidental duplicate loops.
+// These values remain unchanged across cycles.
 // ==================================================
 
-const runningSessionLoops =
-  new Set();
+let taskTabId =
+  null;
+
+let taskWindowId =
+  null;
 
 
 // ==================================================
@@ -160,9 +144,10 @@ const runningSessionLoops =
 // ==================================================
 //
 // requestId → {
+//
 //   senderId,
-//   tabId,
-//   sessionId
+//   tabId
+//
 // }
 // ==================================================
 
@@ -215,6 +200,13 @@ chrome.runtime.onMessage.addListener(
 
     // ----------------------------------------------
     // P4_INPUT
+    //
+    // P4 is loaded directly into this service
+    // worker through p4-listener.js.
+    //
+    // This listener keeps the P4_INPUT contract
+    // available and delegates directly to the
+    // loaded P4 handler.
     // ----------------------------------------------
 
     if (
@@ -336,12 +328,24 @@ chrome.runtime.onMessage.addListener(
 
 
 // ==================================================
-// Start NEW task session
+// Start capture loop
 // ==================================================
 
 async function startCaptureLoop(
   task
 ) {
+
+  if (
+    captureRunning
+  ) {
+
+    notifyPopup(
+      "Capture loop is already running."
+    );
+
+    return;
+  }
+
 
   if (
     typeof task !== "string" ||
@@ -377,430 +381,263 @@ async function startCaptureLoop(
   }
 
 
-  const taskText =
+  // ----------------------------------------------
+  // Bind task to this tab.
+  // ----------------------------------------------
+
+  currentTask =
     task.trim();
 
+  taskTabId =
+    taskTab.id;
 
-  // ----------------------------------------------
-  // If this exact tab already owns a task,
-  // stop that task before replacing it.
-  //
-  // Different tabs can run independently.
-  // ----------------------------------------------
+  taskWindowId =
+    taskTab.windowId ??
+    null;
 
-  const existingSession =
-    findSessionByTabId(
-      taskTab.id
-    );
+  captureRunning =
+    true;
 
-
-  if (
-    existingSession
-  ) {
-
-    stopTaskSession(
-      existingSession.id,
-      "Previous task on this tab was replaced by a new task."
-    );
-  }
-
-
-  // ----------------------------------------------
-  // Create a new independent task session.
-  // ----------------------------------------------
-
-  const sessionId =
-    crypto.randomUUID();
-
-
-  const session = {
-
-    id:
-      sessionId,
-
-    task:
-      taskText,
-
-    tabId:
-      taskTab.id,
-
-    windowId:
-      taskTab.windowId ??
-      null,
-
-    running:
-      true,
-
-    paused:
-      false,
-
-    pauseReason:
-      null,
-
-    currentCycleId:
-      null
-
-  };
-
-
-  taskSessions.set(
-    sessionId,
-    session
-  );
+  currentCycleId =
+    null;
 
 
   resetPrivacyCounters();
 
 
   console.log(
-    "[Obscura] New task session started:",
-    session
+    "[Obscura] Task started:",
+    {
+      task:
+        currentTask,
+
+      taskTabId,
+
+      taskWindowId
+    }
   );
 
 
   notifyPopup(
-    `Capture loop started on tab ${session.tabId}.`
+    `Capture loop started on tab ${taskTabId}.`
   );
 
 
   // ----------------------------------------------
-  // Start this session's independent loop.
+  // Main cycle loop
   // ----------------------------------------------
 
-  runTaskSession(
-    session
-  ).catch(
-    error => {
-
-      console.error(
-        "[Obscura] Task session crashed:",
-        error
-      );
-
-      stopTaskSession(
-        session.id,
-        "Task session stopped because of an unexpected error."
-      );
-    }
-  );
-}
-
-
-// ==================================================
-// Run one task session
-// ==================================================
-
-async function runTaskSession(
-  session
-) {
-
-  if (
-    runningSessionLoops.has(
-      session.id
-    )
+  while (
+    captureRunning
   ) {
 
-    return;
-  }
+    // --------------------------------------------
+    // Wait until the ORIGINAL task tab is active.
+    //
+    // This is required because the prototype uses
+    // chrome.tabs.captureVisibleTab().
+    // --------------------------------------------
+
+    const ready =
+      await waitForTaskTabToBeActive();
 
 
-  runningSessionLoops.add(
-    session.id
-  );
+    if (!ready) {
+      break;
+    }
 
 
-  try {
+    const outcome =
+      await runCaptureCycle(
+        currentTask
+      );
 
-    while (
-      session.running
+
+    if (
+      !captureRunning
+    ) {
+      break;
+    }
+
+
+    // --------------------------------------------
+    // DONE = task completed.
+    // --------------------------------------------
+
+    if (
+      outcome ===
+      "DONE"
     ) {
 
-      // ------------------------------------------
-      // Paused sessions wait here.
-      // ------------------------------------------
+      captureRunning =
+        false;
 
-      if (
-        session.paused
+      break;
+    }
+
+
+    // --------------------------------------------
+    // PAUSED = user interaction is required.
+    //
+    // The confirmation/sensitive-field handler
+    // controls when captureRunning can continue.
+    // --------------------------------------------
+
+    if (
+      outcome ===
+      "PAUSED"
+    ) {
+
+      // Wait until the relevant handler resumes
+      // the capture loop.
+      while (
+        captureRunning &&
+        isCapturePaused()
       ) {
 
         await sleep(
           500
         );
-
-        continue;
       }
 
 
-      // ------------------------------------------
-      // Verify the task tab still exists.
-      // ------------------------------------------
-
-      const taskTab =
-        await getSessionTab(
-          session
-        );
-
-
-      if (
-        !taskTab ||
-        !taskTab.id
-      ) {
-
-        stopTaskSession(
-          session.id,
-          "Task stopped because its original tab was closed."
-        );
-
-        break;
-      }
-
-
-      // ------------------------------------------
-      // Run a complete cycle on THIS session's tab.
-      //
-      // The active tab is irrelevant here.
-      // ------------------------------------------
-
-      const outcome =
-        await runCaptureCycle(
-          session
-        );
-
-
-      if (
-        !session.running
-      ) {
-
-        break;
-      }
-
-
-      if (
-        outcome ===
-        "DONE"
-      ) {
-
-        stopTaskSession(
-          session.id,
-          "Task completed successfully."
-        );
-
-        break;
-      }
-
-
-      if (
-        outcome ===
-        "PAUSED"
-      ) {
-
-        continue;
-      }
-
-
-      // ------------------------------------------
-      // Fresh cycle after interval.
-      // ------------------------------------------
-
-      await sleep(
-        CAPTURE_INTERVAL_MS
-      );
+      continue;
     }
 
-  } finally {
 
-    runningSessionLoops.delete(
-      session.id
+    // --------------------------------------------
+    // Normal cycle:
+    //
+    // wait 5 seconds and capture a fresh frame.
+    // --------------------------------------------
+
+    await sleep(
+      CAPTURE_INTERVAL_MS
     );
-
-    if (
-      !session.running
-    ) {
-
-      taskSessions.delete(
-        session.id
-      );
-    }
   }
+
+
+  // ----------------------------------------------
+  // Clean up task state.
+  // ----------------------------------------------
+
+  captureRunning =
+    false;
+
+  currentTask =
+    null;
+
+  currentCycleId =
+    null;
+
+  taskTabId =
+    null;
+
+  taskWindowId =
+    null;
 }
 
 
 // ==================================================
-// Stop ALL task sessions
+// Capture pause state
+// ==================================================
+
+let capturePaused =
+  false;
+
+
+// ==================================================
+// Check pause state
+// ==================================================
+
+function isCapturePaused() {
+
+  return (
+    capturePaused === true
+  );
+}
+
+
+// ==================================================
+// Pause capture loop
+// ==================================================
+
+function pauseCaptureLoop(
+  reason
+) {
+
+  capturePaused =
+    true;
+
+
+  notifyPopup(
+    reason
+  );
+
+
+  console.log(
+    "[Obscura] Capture loop paused:",
+    reason
+  );
+}
+
+
+// ==================================================
+// Resume capture loop
+// ==================================================
+
+function resumeCaptureLoop(
+  message =
+    "Capture loop resumed."
+) {
+
+  capturePaused =
+    false;
+
+
+  notifyPopup(
+    message
+  );
+
+
+  console.log(
+    "[Obscura] Capture loop resumed."
+  );
+}
+
+
+// ==================================================
+// Stop capture loop
 // ==================================================
 
 function stopCaptureLoop() {
 
   if (
-    taskSessions.size === 0
+    !captureRunning
   ) {
-
-    notifyPopup(
-      "No capture loop is running."
-    );
 
     return;
   }
 
 
-  for (
-    const session of taskSessions.values()
-  ) {
+  captureRunning =
+    false;
 
-    session.running =
-      false;
+  capturePaused =
+    false;
 
-    session.paused =
-      false;
+  taskTabId =
+    null;
 
-    session.currentCycleId =
-      null;
-  }
+  taskWindowId =
+    null;
 
 
   pendingConfirmations.clear();
 
 
   notifyPopup(
-    "All capture loops stopped."
-  );
-}
-
-
-// ==================================================
-// Stop one task session
-// ==================================================
-
-function stopTaskSession(
-  sessionId,
-  statusMessage = null
-) {
-
-  const session =
-    taskSessions.get(
-      sessionId
-    );
-
-
-  if (
-    !session
-  ) {
-
-    return;
-  }
-
-
-  session.running =
-    false;
-
-  session.paused =
-    false;
-
-  session.pauseReason =
-    null;
-
-  session.currentCycleId =
-    null;
-
-
-  console.log(
-    "[Obscura] Task session stopped:",
-    {
-      sessionId,
-      tabId:
-        session.tabId,
-      task:
-        session.task
-    }
-  );
-
-
-  if (
-    statusMessage
-  ) {
-
-    notifyPopup(
-      statusMessage
-    );
-  }
-}
-
-
-// ==================================================
-// Pause task session
-// ==================================================
-
-function pauseTaskSession(
-  session,
-  reason
-) {
-
-  session.paused =
-    true;
-
-  session.pauseReason =
-    reason;
-
-
-  console.log(
-    "[Obscura] Task session paused:",
-    {
-      sessionId:
-        session.id,
-
-      tabId:
-        session.tabId,
-
-      reason
-    }
-  );
-
-
-  notifyPopup(
-    reason
-  );
-}
-
-
-// ==================================================
-// Resume task session
-// ==================================================
-
-function resumeTaskSession(
-  session,
-  reason = "Task resumed."
-) {
-
-  if (
-    !session ||
-    !session.running
-  ) {
-
-    return;
-  }
-
-
-  session.paused =
-    false;
-
-  session.pauseReason =
-    null;
-
-
-  console.log(
-    "[Obscura] Task session resumed:",
-    {
-      sessionId:
-        session.id,
-
-      tabId:
-        session.tabId
-    }
-  );
-
-
-  notifyPopup(
-    reason
+    "Capture loop stopped."
   );
 }
 
@@ -856,46 +693,14 @@ async function getActiveTab() {
 
 
 // ==================================================
-// Find task session by tab
+// Task tab
 // ==================================================
 
-function findSessionByTabId(
-  tabId
-) {
-
-  for (
-    const session of taskSessions.values()
-  ) {
-
-    if (
-      session.tabId ===
-      tabId &&
-      session.running
-    ) {
-
-      return session;
-    }
-  }
-
-
-  return null;
-}
-
-
-// ==================================================
-// Get session tab
-// ==================================================
-
-async function getSessionTab(
-  session
-) {
+async function getTaskTab() {
 
   if (
-    !session ||
-    session.tabId ===
-      null ||
-    session.tabId ===
-      undefined
+    taskTabId === null ||
+    taskTabId === undefined
   ) {
 
     return null;
@@ -905,7 +710,7 @@ async function getSessionTab(
   try {
 
     return await chrome.tabs.get(
-      session.tabId
+      taskTabId
     );
 
   } catch (error) {
@@ -922,119 +727,125 @@ async function getSessionTab(
 
 
 // ==================================================
+// Check task tab activity
+// ==================================================
+
+async function isTaskTabActive() {
+
+  const taskTab =
+    await getTaskTab();
+
+
+  if (
+    !taskTab ||
+    !taskTab.id
+  ) {
+
+    return false;
+  }
+
+
+  return (
+    taskTab.active === true
+  );
+}
+
+
+// ==================================================
+// Wait for task tab to become active
+// ==================================================
+
+async function waitForTaskTabToBeActive() {
+
+  while (
+    captureRunning
+  ) {
+
+    const taskTab =
+      await getTaskTab();
+
+
+    // --------------------------------------------
+    // Original tab was closed.
+    // --------------------------------------------
+
+    if (
+      !taskTab ||
+      !taskTab.id
+    ) {
+
+      notifyPopup(
+        "Task stopped because the original task tab was closed."
+      );
+
+
+      captureRunning =
+        false;
+
+
+      return false;
+    }
+
+
+    // --------------------------------------------
+    // Task tab is active.
+    // --------------------------------------------
+
+    if (
+      taskTab.active === true
+    ) {
+
+      return true;
+    }
+
+
+    // --------------------------------------------
+    // User is working elsewhere.
+    // --------------------------------------------
+
+    notifyPopup(
+      "Task paused for capture — working in another tab."
+    );
+
+
+    await sleep(
+      500
+    );
+  }
+
+
+  return false;
+}
+
+
+// ==================================================
 // Screenshot
+// ==================================================
 //
 // IMPORTANT:
 //
-// captureVisibleTab() captures the active tab.
+// This intentionally uses captureVisibleTab().
 //
-// We therefore use chrome.debugger + CDP for the
-// task-bound tab so an inactive task tab can still
-// be captured.
+// We do NOT use chrome.debugger because that causes
+// Chrome's:
 //
+//   "'Obscura' started debugging this browser"
+//
+// warning.
+//
+// Therefore the task tab must be visible before a
+// new capture cycle begins.
 // ==================================================
 
-async function captureScreenshot(
-  tabId
-) {
+async function captureScreenshot() {
 
-  if (
-    !tabId
-  ) {
-
-    throw new Error(
-      "No task tab ID available for screenshot."
-    );
-  }
-
-
-  const debuggee = {
-
-    tabId
-
-  };
-
-
-  let attached =
-    false;
-
-
-  try {
-
-    await chrome.debugger.attach(
-      debuggee,
-      "1.3"
-    );
-
-
-    attached =
-      true;
-
-
-    const result =
-      await chrome.debugger.sendCommand(
-        debuggee,
-        "Page.captureScreenshot",
-        {
-
-          format:
-            "png",
-
-          fromSurface:
-            true
-
-        }
-      );
-
-
-    if (
-      !result?.data
-    ) {
-
-      throw new Error(
-        "CDP returned no screenshot data."
-      );
+  return chrome.tabs.captureVisibleTab(
+    null,
+    {
+      format:
+        "png"
     }
-
-
-    return `data:image/png;base64,${result.data}`;
-
-  } catch (error) {
-
-    console.error(
-      "[Obscura] Background-tab screenshot failed:",
-      error
-    );
-
-
-    throw new Error(
-      `Task-tab screenshot failed: ${
-        error?.message ||
-        "unknown debugger error"
-      }`
-    );
-
-  } finally {
-
-    if (
-      attached
-    ) {
-
-      try {
-
-        await chrome.debugger.detach(
-          debuggee
-        );
-
-      } catch (detachError) {
-
-        console.warn(
-          "[Obscura] Failed to detach debugger:",
-          detachError
-        );
-      }
-    }
-  }
+  );
 }
 
 
@@ -1245,6 +1056,10 @@ async function sendToP4(
   }
 
 
+  // ----------------------------------------------
+  // Verify P4 was loaded.
+  // ----------------------------------------------
+
   if (
     typeof globalThis.handleP4Input !==
     "function"
@@ -1358,6 +1173,8 @@ async function callP5({
         ? toP4.elements
         : [],
 
+    // P4 receives and forwards P3's sanitized
+    // screenshot.
     screenshot:
       toP4.screenshot ??
       null
@@ -1585,7 +1402,8 @@ function validateP5Response(
 
 async function handleP5Action(
   p5Action,
-  session
+  cycleId,
+  tabId
 ) {
 
   // ----------------------------------------------
@@ -1624,13 +1442,19 @@ async function handleP5Action(
       p5Action.metadata?.reason;
 
 
+    // --------------------------------------------
+    // Sensitive field requires user input.
+    //
+    // This is a real pause. The next capture will
+    // NOT happen until the loop is resumed.
+    // --------------------------------------------
+
     if (
       reason ===
       "sensitive_field_requires_user"
     ) {
 
-      pauseTaskSession(
-        session,
+      pauseCaptureLoop(
         "User input required: a sensitive field needs to be filled manually."
       );
 
@@ -1638,6 +1462,14 @@ async function handleP5Action(
       return "PAUSED";
     }
 
+
+    // --------------------------------------------
+    // Normal wait.
+    //
+    // Normal wait is NOT a user-interaction pause.
+    // The outer loop will perform another fresh
+    // capture after the normal interval.
+    // --------------------------------------------
 
     notifyPopup(
       `P5 returned wait (confidence ${p5Action.confidence}).`
@@ -1660,8 +1492,8 @@ async function handleP5Action(
   const result =
     await sendActionToP6(
       p5Action,
-      session.currentCycleId,
-      session.tabId
+      cycleId,
+      tabId
     );
 
 
@@ -1684,7 +1516,10 @@ async function handleP5Action(
 
 
   // ----------------------------------------------
-  // Confirmation pending
+  // Confirmation pending.
+  //
+  // Do NOT allow the outer loop to start another
+  // cycle while P6 is waiting for the user.
   // ----------------------------------------------
 
   if (
@@ -1692,8 +1527,7 @@ async function handleP5Action(
     "CONFIRMATION_PENDING"
   ) {
 
-    pauseTaskSession(
-      session,
+    pauseCaptureLoop(
       "P6 is waiting for user confirmation."
     );
 
@@ -1708,6 +1542,16 @@ async function handleP5Action(
 
 // ==================================================
 // P1 → P6 action request
+//
+// P6 runs inside content.js because it needs the
+// live page DOM.
+//
+// Therefore use tabs.sendMessage().
+//
+// NOTE:
+// There is intentionally no P6_ACTION_REQUEST
+// constant in p6/messageTypes.js. The existing
+// literal message type is preserved.
 // ==================================================
 
 async function sendActionToP6(
@@ -1939,13 +1783,10 @@ function handleConfirmationRequest(
     null;
 
 
-  const session =
-    senderTabId !== null
-      ? findSessionByTabId(
-          senderTabId
-        )
-      : null;
-
+  // ----------------------------------------------
+  // Store the exact P6 tab so the response is
+  // returned to the same content script.
+  // ----------------------------------------------
 
   pendingConfirmations.set(
     requestId,
@@ -1956,11 +1797,7 @@ function handleConfirmationRequest(
         null,
 
       tabId:
-        senderTabId,
-
-      sessionId:
-        session?.id ??
-        null
+        senderTabId
 
     }
   );
@@ -1977,21 +1814,13 @@ function handleConfirmationRequest(
   );
 
 
-  if (
-    session
-  ) {
+  // ----------------------------------------------
+  // Pause the capture loop while the user decides.
+  // ----------------------------------------------
 
-    pauseTaskSession(
-      session,
-      `Confirmation required: ${targetSummary}`
-    );
-
-  } else {
-
-    notifyPopup(
-      `Confirmation required: ${targetSummary}`
-    );
-  }
+  pauseCaptureLoop(
+    `Confirmation required: ${targetSummary}`
+  );
 
 
   // ----------------------------------------------
@@ -2091,6 +1920,12 @@ async function handleConfirmationResponse(
     }
 
 
+    // --------------------------------------------
+    // P1 → P6
+    //
+    // Confirmation listener lives in content.js.
+    // --------------------------------------------
+
     await chrome.tabs.sendMessage(
       pending.tabId,
       {
@@ -2114,32 +1949,19 @@ async function handleConfirmationResponse(
 
 
     // --------------------------------------------
-    // Resume the exact task session that was
-    // waiting for this confirmation.
+    // Resume the capture loop only after P6 has
+    // received the user's decision.
     // --------------------------------------------
 
     if (
-      pending.sessionId
+      captureRunning
     ) {
 
-      const session =
-        taskSessions.get(
-          pending.sessionId
-        );
-
-
-      if (
-        session &&
-        session.running
-      ) {
-
-        resumeTaskSession(
-          session,
-          approved
-            ? "Confirmation approved. Task resumed."
-            : "Confirmation denied. Task resumed for re-evaluation."
-        );
-      }
+      resumeCaptureLoop(
+        approved
+          ? "Confirmation approved. Capture loop resumed."
+          : "Confirmation denied. Capture loop resumed for re-evaluation."
+      );
     }
 
   } catch (error) {
@@ -2155,27 +1977,10 @@ async function handleConfirmationResponse(
     );
 
 
-    if (
-      pending.sessionId
-    ) {
-
-      const session =
-        taskSessions.get(
-          pending.sessionId
-        );
-
-
-      if (
-        session
-      ) {
-
-        session.paused =
-          false;
-
-        session.pauseReason =
-          null;
-      }
-    }
+    // Do not leave the whole capture loop stuck
+    // indefinitely if P6 is no longer reachable.
+    capturePaused =
+      false;
   }
 }
 
@@ -2395,6 +2200,16 @@ function normalizeImageData(
 
 // ==================================================
 // Save screenshots
+//
+// Files:
+//
+// Downloads/
+//   obscura-redacted/
+//     <cycle>-ORIGINAL.png
+//     <cycle>-REDACTED.png
+//
+// Original remains local only.
+// It is never sent to P5.
 // ==================================================
 
 async function saveRedactedScreenshot({
@@ -2504,6 +2319,10 @@ async function saveRedactedScreenshot({
     );
 
 
+    // --------------------------------------------
+    // Keep latest 15 pairs.
+    // --------------------------------------------
+
     while (
       pairs.length >
       MAX_SAVED_PAIRS
@@ -2570,7 +2389,7 @@ async function saveRedactedScreenshot({
 // ==================================================
 
 async function runCaptureCycle(
-  session,
+  task,
   maxAttempts =
     MAX_CAPTURE_ATTEMPTS
 ) {
@@ -2580,9 +2399,7 @@ async function runCaptureCycle(
   // ----------------------------------------------
 
   const tab =
-    await getSessionTab(
-      session
-    );
+    await getTaskTab();
 
 
   if (
@@ -2590,13 +2407,33 @@ async function runCaptureCycle(
     !tab.id
   ) {
 
-    stopTaskSession(
-      session.id,
+    notifyPopup(
       "Task tab was closed or is no longer available."
     );
 
 
+    captureRunning =
+      false;
+
+
     return "STOPPED";
+  }
+
+
+  // ----------------------------------------------
+  // Safety check:
+  // task tab must be active before capture.
+  // ----------------------------------------------
+
+  if (
+    !(await isTaskTabActive())
+  ) {
+
+    notifyPopup(
+      "Task tab is not active. Waiting before capture."
+    );
+
+    return "CONTINUE";
   }
 
 
@@ -2610,7 +2447,7 @@ async function runCaptureCycle(
     crypto.randomUUID();
 
 
-  session.currentCycleId =
+  currentCycleId =
     cycleId;
 
 
@@ -2621,7 +2458,7 @@ async function runCaptureCycle(
   ) {
 
     notifyPopup(
-      `Capturing tab ${session.tabId} (attempt ${attempt}/${maxAttempts})...`
+      `Capturing (attempt ${attempt}/${maxAttempts})...`
     );
 
 
@@ -2638,16 +2475,11 @@ async function runCaptureCycle(
 
 
       // ------------------------------------------
-      // 2. Capture the TASK TAB.
-      //
-      // This does NOT depend on which tab the user
-      // is currently viewing.
+      // 2. Capture screenshot
       // ------------------------------------------
 
       const screenshot =
-        await captureScreenshot(
-          tab.id
-        );
+        await captureScreenshot();
 
 
       // ------------------------------------------
@@ -2707,8 +2539,7 @@ async function runCaptureCycle(
       const payload =
         buildPayload({
 
-          task:
-            session.task,
+          task,
 
           screenshot,
 
@@ -2820,6 +2651,9 @@ async function runCaptureCycle(
 
       // ------------------------------------------
       // 11. P3 → P6 sensitive map
+      //
+      // P6 registry lives in content.js.
+      // Therefore use tabs.sendMessage().
       // ------------------------------------------
 
       if (
@@ -2877,6 +2711,8 @@ async function runCaptureCycle(
 
       // ------------------------------------------
       // 13. P3 → P4
+      //
+      // P4 runs inside this service worker.
       // ------------------------------------------
 
       notifyPopup(
@@ -2887,7 +2723,7 @@ async function runCaptureCycle(
       const p4Response =
         await sendToP4(
           p23Result.toP4,
-          session.task
+          task
         );
 
 
@@ -2928,6 +2764,9 @@ async function runCaptureCycle(
 
       // ------------------------------------------
       // 15. P4 → P5
+      //
+      // Only P4 filtered elements and the
+      // sanitized screenshot are sent to P5.
       // ------------------------------------------
 
       notifyPopup(
@@ -2943,8 +2782,7 @@ async function runCaptureCycle(
         p5Action =
           await callP5({
 
-            task:
-              session.task,
+            task,
 
             toP4:
               p4Response.result
@@ -2978,7 +2816,9 @@ async function runCaptureCycle(
 
           p5Action,
 
-          session
+          cycleId,
+
+          tab.id
 
         );
 
@@ -2991,6 +2831,16 @@ async function runCaptureCycle(
         outcome ===
         "DONE"
       ) {
+
+        notifyPopup(
+          `Cycle ${cycleId} completed. Task finished.`
+        );
+
+
+        console.log(
+          `[Obscura] Cycle ${cycleId} completed and task finished.`
+        );
+
 
         return "DONE";
       }
@@ -3005,6 +2855,16 @@ async function runCaptureCycle(
         "PAUSED"
       ) {
 
+        notifyPopup(
+          `Cycle ${cycleId} paused awaiting user input.`
+        );
+
+
+        console.log(
+          `[Obscura] Cycle ${cycleId} paused.`
+        );
+
+
         return "PAUSED";
       }
 
@@ -3014,12 +2874,12 @@ async function runCaptureCycle(
       // ------------------------------------------
 
       notifyPopup(
-        `Cycle ${cycleId} completed on tab ${session.tabId}.`
+        `Cycle ${cycleId} completed.`
       );
 
 
       console.log(
-        `[Obscura] Cycle ${cycleId} completed successfully on tab ${session.tabId}.`
+        `[Obscura] Cycle ${cycleId} completed successfully.`
       );
 
 

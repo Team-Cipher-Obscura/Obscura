@@ -8,8 +8,7 @@
     "tabs",
     "activeTab",
     "downloads",
-    "storage",
-    "debugger"
+    "storage"
   ],
 
   "host_permissions": [

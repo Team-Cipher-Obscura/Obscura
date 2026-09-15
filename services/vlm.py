@@ -57,7 +57,8 @@ def call_vlm(
                 contents=contents,
                 config=types.GenerateContentConfig(
                     temperature=0,
-                    max_output_tokens=100
+                    max_output_tokens=200,
+                    response_mime_type="application/json"
                 )
             )
 

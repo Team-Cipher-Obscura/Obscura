@@ -44,10 +44,6 @@
 //   done
 //
 // "done" is the explicit task-completion signal.
-//
-// P6 confirmation and sensitive-field waits pause the
-// capture loop until the relevant user interaction is
-// completed.
 
 
 // ==================================================
@@ -141,14 +137,6 @@ let taskWindowId =
 
 // ==================================================
 // Confirmation state
-// ==================================================
-//
-// requestId → {
-//
-//   senderId,
-//   tabId
-//
-// }
 // ==================================================
 
 const pendingConfirmations =
@@ -433,9 +421,6 @@ async function startCaptureLoop(
 
     // --------------------------------------------
     // Wait until the ORIGINAL task tab is active.
-    //
-    // This is required because the prototype uses
-    // chrome.tabs.captureVisibleTab().
     // --------------------------------------------
 
     const ready =
@@ -447,10 +432,9 @@ async function startCaptureLoop(
     }
 
 
-    const outcome =
-      await runCaptureCycle(
-        currentTask
-      );
+    await runCaptureCycle(
+      currentTask
+    );
 
 
     if (
@@ -459,57 +443,6 @@ async function startCaptureLoop(
       break;
     }
 
-
-    // --------------------------------------------
-    // DONE = task completed.
-    // --------------------------------------------
-
-    if (
-      outcome ===
-      "DONE"
-    ) {
-
-      captureRunning =
-        false;
-
-      break;
-    }
-
-
-    // --------------------------------------------
-    // PAUSED = user interaction is required.
-    //
-    // The confirmation/sensitive-field handler
-    // controls when captureRunning can continue.
-    // --------------------------------------------
-
-    if (
-      outcome ===
-      "PAUSED"
-    ) {
-
-      // Wait until the relevant handler resumes
-      // the capture loop.
-      while (
-        captureRunning &&
-        isCapturePaused()
-      ) {
-
-        await sleep(
-          500
-        );
-      }
-
-
-      continue;
-    }
-
-
-    // --------------------------------------------
-    // Normal cycle:
-    //
-    // wait 5 seconds and capture a fresh frame.
-    // --------------------------------------------
 
     await sleep(
       CAPTURE_INTERVAL_MS
@@ -539,74 +472,6 @@ async function startCaptureLoop(
 
 
 // ==================================================
-// Capture pause state
-// ==================================================
-
-let capturePaused =
-  false;
-
-
-// ==================================================
-// Check pause state
-// ==================================================
-
-function isCapturePaused() {
-
-  return (
-    capturePaused === true
-  );
-}
-
-
-// ==================================================
-// Pause capture loop
-// ==================================================
-
-function pauseCaptureLoop(
-  reason
-) {
-
-  capturePaused =
-    true;
-
-
-  notifyPopup(
-    reason
-  );
-
-
-  console.log(
-    "[Obscura] Capture loop paused:",
-    reason
-  );
-}
-
-
-// ==================================================
-// Resume capture loop
-// ==================================================
-
-function resumeCaptureLoop(
-  message =
-    "Capture loop resumed."
-) {
-
-  capturePaused =
-    false;
-
-
-  notifyPopup(
-    message
-  );
-
-
-  console.log(
-    "[Obscura] Capture loop resumed."
-  );
-}
-
-
-// ==================================================
 // Stop capture loop
 // ==================================================
 
@@ -623,17 +488,11 @@ function stopCaptureLoop() {
   captureRunning =
     false;
 
-  capturePaused =
-    false;
-
   taskTabId =
     null;
 
   taskWindowId =
     null;
-
-
-  pendingConfirmations.clear();
 
 
   notifyPopup(
@@ -821,21 +680,6 @@ async function waitForTaskTabToBeActive() {
 // ==================================================
 // Screenshot
 // ==================================================
-//
-// IMPORTANT:
-//
-// This intentionally uses captureVisibleTab().
-//
-// We do NOT use chrome.debugger because that causes
-// Chrome's:
-//
-//   "'Obscura' started debugging this browser"
-//
-// warning.
-//
-// Therefore the task tab must be visible before a
-// new capture cycle begins.
-// ==================================================
 
 async function captureScreenshot() {
 
@@ -1015,6 +859,31 @@ async function sendToDownstream(
 
 // ==================================================
 // P3 → P4
+//
+// P4 is loaded directly into the P1 service worker.
+//
+// P3 toP4:
+//
+// {
+//   frame_id,
+//   elements,
+//   screenshot
+// }
+//
+// P1 additionally supplies:
+//
+// task
+//
+// P4:
+//
+// handleP4Input(payload, task)
+//
+// returns:
+//
+// {
+//   valid,
+//   result
+// }
 // ==================================================
 
 async function sendToP4(
@@ -1442,34 +1311,19 @@ async function handleP5Action(
       p5Action.metadata?.reason;
 
 
-    // --------------------------------------------
-    // Sensitive field requires user input.
-    //
-    // This is a real pause. The next capture will
-    // NOT happen until the loop is resumed.
-    // --------------------------------------------
-
     if (
       reason ===
       "sensitive_field_requires_user"
     ) {
 
-      pauseCaptureLoop(
+      notifyPopup(
         "User input required: a sensitive field needs to be filled manually."
       );
 
 
-      return "PAUSED";
+      return "WAIT";
     }
 
-
-    // --------------------------------------------
-    // Normal wait.
-    //
-    // Normal wait is NOT a user-interaction pause.
-    // The outer loop will perform another fresh
-    // capture after the normal interval.
-    // --------------------------------------------
 
     notifyPopup(
       `P5 returned wait (confidence ${p5Action.confidence}).`
@@ -1515,27 +1369,6 @@ async function handleP5Action(
   );
 
 
-  // ----------------------------------------------
-  // Confirmation pending.
-  //
-  // Do NOT allow the outer loop to start another
-  // cycle while P6 is waiting for the user.
-  // ----------------------------------------------
-
-  if (
-    result.status ===
-    "CONFIRMATION_PENDING"
-  ) {
-
-    pauseCaptureLoop(
-      "P6 is waiting for user confirmation."
-    );
-
-
-    return "PAUSED";
-  }
-
-
   return "CONTINUE";
 }
 
@@ -1547,11 +1380,6 @@ async function handleP5Action(
 // live page DOM.
 //
 // Therefore use tabs.sendMessage().
-//
-// NOTE:
-// There is intentionally no P6_ACTION_REQUEST
-// constant in p6/messageTypes.js. The existing
-// literal message type is preserved.
 // ==================================================
 
 async function sendActionToP6(
@@ -1581,7 +1409,6 @@ async function sendActionToP6(
     metadata:
       action.metadata ||
       {}
-
   };
 
 
@@ -1783,11 +1610,6 @@ function handleConfirmationRequest(
     null;
 
 
-  // ----------------------------------------------
-  // Store the exact P6 tab so the response is
-  // returned to the same content script.
-  // ----------------------------------------------
-
   pendingConfirmations.set(
     requestId,
     {
@@ -1814,11 +1636,7 @@ function handleConfirmationRequest(
   );
 
 
-  // ----------------------------------------------
-  // Pause the capture loop while the user decides.
-  // ----------------------------------------------
-
-  pauseCaptureLoop(
+  notifyPopup(
     `Confirmation required: ${targetSummary}`
   );
 
@@ -1947,23 +1765,6 @@ async function handleConfirmationResponse(
         : "Confirmation denied."
     );
 
-
-    // --------------------------------------------
-    // Resume the capture loop only after P6 has
-    // received the user's decision.
-    // --------------------------------------------
-
-    if (
-      captureRunning
-    ) {
-
-      resumeCaptureLoop(
-        approved
-          ? "Confirmation approved. Capture loop resumed."
-          : "Confirmation denied. Capture loop resumed for re-evaluation."
-      );
-    }
-
   } catch (error) {
 
     console.error(
@@ -1975,12 +1776,6 @@ async function handleConfirmationResponse(
     notifyPopup(
       "Failed to send confirmation response to P6."
     );
-
-
-    // Do not leave the whole capture loop stuck
-    // indefinitely if P6 is no longer reachable.
-    capturePaused =
-      false;
   }
 }
 
@@ -2416,7 +2211,7 @@ async function runCaptureCycle(
       false;
 
 
-    return "STOPPED";
+    return;
   }
 
 
@@ -2433,7 +2228,7 @@ async function runCaptureCycle(
       "Task tab is not active. Waiting before capture."
     );
 
-    return "CONTINUE";
+    return;
   }
 
 
@@ -2528,7 +2323,7 @@ async function runCaptureCycle(
           "Viewport kept changing - cycle cancelled."
         );
 
-        return "CONTINUE";
+        return;
       }
 
 
@@ -2587,7 +2382,7 @@ async function runCaptureCycle(
           "Frame invalid after retry - cycle cancelled."
         );
 
-        return "CONTINUE";
+        return;
       }
 
 
@@ -2619,7 +2414,7 @@ async function runCaptureCycle(
           "Cycle ID mismatch - cycle cancelled."
         );
 
-        return "CONTINUE";
+        return;
       }
 
 
@@ -2645,7 +2440,7 @@ async function runCaptureCycle(
           "P3 did not return a P4 payload."
         );
 
-        return "CONTINUE";
+        return;
       }
 
 
@@ -2739,7 +2534,7 @@ async function runCaptureCycle(
           }`
         );
 
-        return "CONTINUE";
+        return;
       }
 
 
@@ -2758,7 +2553,7 @@ async function runCaptureCycle(
           "P4 frame ID mismatch - cycle cancelled."
         );
 
-        return "CONTINUE";
+        return;
       }
 
 
@@ -2803,7 +2598,7 @@ async function runCaptureCycle(
         );
 
 
-        return "CONTINUE";
+        return;
       }
 
 
@@ -2823,56 +2618,6 @@ async function runCaptureCycle(
         );
 
 
-      // ------------------------------------------
-      // DONE
-      // ------------------------------------------
-
-      if (
-        outcome ===
-        "DONE"
-      ) {
-
-        notifyPopup(
-          `Cycle ${cycleId} completed. Task finished.`
-        );
-
-
-        console.log(
-          `[Obscura] Cycle ${cycleId} completed and task finished.`
-        );
-
-
-        return "DONE";
-      }
-
-
-      // ------------------------------------------
-      // PAUSED
-      // ------------------------------------------
-
-      if (
-        outcome ===
-        "PAUSED"
-      ) {
-
-        notifyPopup(
-          `Cycle ${cycleId} paused awaiting user input.`
-        );
-
-
-        console.log(
-          `[Obscura] Cycle ${cycleId} paused.`
-        );
-
-
-        return "PAUSED";
-      }
-
-
-      // ------------------------------------------
-      // Normal cycle completion.
-      // ------------------------------------------
-
       notifyPopup(
         `Cycle ${cycleId} completed.`
       );
@@ -2883,7 +2628,33 @@ async function runCaptureCycle(
       );
 
 
-      return "CONTINUE";
+      // ------------------------------------------
+      // DONE = stop entire capture loop.
+      // ------------------------------------------
+
+      if (
+        outcome ===
+        "DONE"
+      ) {
+
+        captureRunning =
+          false;
+
+        return;
+      }
+
+
+      // ------------------------------------------
+      // For all other valid actions:
+      //
+      // outer loop waits 5 seconds and then starts
+      // a completely fresh capture.
+      //
+      // waitForTaskTabToBeActive() ensures that
+      // the correct tab is active before capture.
+      // ------------------------------------------
+
+      return;
 
     } catch (error) {
 
@@ -2910,11 +2681,7 @@ async function runCaptureCycle(
         "Capture failed after retry - cycle cancelled."
       );
 
-
-      return "CONTINUE";
+      return;
     }
   }
-
-
-  return "CONTINUE";
 }
